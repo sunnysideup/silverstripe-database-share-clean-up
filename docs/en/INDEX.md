@@ -1,6 +1,6 @@
 # how it works:
 
-1. browse to /dev/tasks/database-share-clean-up (using command line or browser)
+1. browse to `/dev/tasks/database-share-clean-up` (using command line or browser)
 
 2. this will run through entire database AND ....
 
@@ -13,7 +13,3 @@
 
 
 3. it will look at any table / field that may be sensitive and remove data (e.g. any Email field).
-
-
-
-   
