@@ -28,7 +28,7 @@ class CleanUp extends BuildTask
     }
 
 
-    protected function getAllFieldsForOneTable()
+    protected function getAllFieldsForOneTable(string $tableName)
     {
 
     }
