@@ -1,20 +1,23 @@
 <?php
 
 namespace Sunnysideup\DatabaseShareCleanUp\Api;
-use SilverStripe\ORM\DB;
-use Sunnysideup\Flush\FlushNow;
-use SilverStripe\Control\HTTPRequest;
+
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
+use Sunnysideup\Flush\FlushNow;
 
 class Anonymiser
 {
-
     use Injectable;
     use Configurable;
     use Extensible;
 
+    protected $databaseAction = null;
+
+    /**
+     * @var array
+     */
     private static $fields_to_anonymise = [
         'Email',
         'Address',
@@ -34,8 +37,7 @@ class Anonymiser
     ];
 
     /**
-     *
-     * @var [type]
+     * @var array
      */
     private static $tables_to_remove = [
         'MemberPassword',
@@ -49,15 +51,12 @@ class Anonymiser
      *
      * @var array
      */
-    private static $keep_table_field_combos = [
+    private static $keep_table_field_combos = [];
 
-    ];
-
-    private static $also_remove_table_field_combos = [
-
-    ];
-
-    protected $databaseAction = null;
+    /**
+     * @var array
+     */
+    private static $also_remove_table_field_combos = [];
 
     public function setDatabaseActions($databaseActions)
     {
@@ -70,28 +69,27 @@ class Anonymiser
         $tables = $this->Config()->get('tables_to_remove');
         $keep = $this->Config()->get('keep_table_field_combos');
         $also = $this->Config()->get('also_remove_table_field_combos');
-        if(in_array($tableName, $tables, true)) {
-            FlushNow::do_flush('Truncating '.$tableName, 'bad');
+        if (in_array($tableName, $tables, true)) {
+            FlushNow::do_flush('Truncating ' . $tableName, 'bad');
             $this->databaseActions->truncateTable($tableName);
             return;
         }
         foreach ($fieldList as $fieldName) {
-            $combo = $tableName.'.'.$fieldName;
-            if(in_array($fieldName, $keep, true)) {
+            $combo = $tableName . '.' . $fieldName;
+            if (in_array($fieldName, $keep, true)) {
                 continue;
             }
             if (in_array($fieldName, $fieldsToDelete, true)) {
-                FlushNow::do_flush('Truncating '.$tableName.'.'.$fieldName, 'bad');
+                FlushNow::do_flush('Truncating ' . $tableName . '.' . $fieldName, 'bad');
                 $this->databaseActions->truncateField($tableName, $fieldName);
             }
         }
-        foreach($also as $combo) {
+        foreach ($also as $combo) {
             list($tableName, $fieldName) = explode('.', $combo);
-            FlushNow::do_flush('Truncating '.$tableName.'.'.$fieldName, 'bad');
+            FlushNow::do_flush('Truncating ' . $tableName . '.' . $fieldName, 'bad');
             $this->databaseActions->truncateField($tableName, $fieldName);
         }
     }
-
 
     // look for any field called Email / Phone / Address / FirstName /
 }
