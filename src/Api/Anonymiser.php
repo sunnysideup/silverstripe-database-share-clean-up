@@ -20,6 +20,11 @@ class Anonymiser
      */
     private static $fields_to_anonymise = [
         'Email',
+        'EmailAddress',
+        'Username',
+        'City',
+        'Suburb',
+        'Suburb',
         'Address',
         'Address1',
         'Address2',
@@ -79,7 +84,7 @@ class Anonymiser
                 continue;
             }
             if (in_array($fieldName, $fieldsToDelete, true)) {
-                $this->databaseActions->truncateField($tableName, $fieldName);
+                $this->databaseActions->anonymiseField($tableName, $fieldName);
             }
         }
         foreach ($also as $combo) {

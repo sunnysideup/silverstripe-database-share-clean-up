@@ -9,14 +9,32 @@ class DatabaseActions
 {
     protected $forReal = false;
 
+    protected $debug = false;
+
     public function setForReal(bool $bool)
     {
         $this->forReal = $bool;
     }
+    public function setDebug(bool $bool)
+    {
+        $this->debug = $bool;
+    }
+
+    public function deleteAllObsoleteTables()
+    {
+        $tables = $this->getAllTables();
+        foreach($tables as $table) {
+            if(strpos($table, '_obsolete_') === 0) {
+                FlushNow::do_flush('Deleting '.$table .' as it is obsolete', 'deleted');
+                $sql = 'DROP TABLE "'.$table.'";';
+                $this->executeSql($sql);
+            }
+        }
+    }
 
     public function truncateTable(string $tableName)
     {
-        FlushNow::do_flush('Truncating ' . $tableName, 'bad');
+        FlushNow::do_flush('Emptying ' . $tableName, 'bad');
         $sql = 'TRUNCATE TABLE "' . $tableName . '"; ';
         $this->executeSql($sql);
     }
@@ -24,13 +42,28 @@ class DatabaseActions
     public function truncateField(string $tableName, string $fieldName, ?int $limit = 99999999, ?bool $silent = false)
     {
         if($silent === false) {
-            FlushNow::do_flush('Truncating ' . $tableName . '.' . $fieldName, 'bad');
+            FlushNow::do_flush('Emptying ' . $tableName . '.' . $fieldName, 'bad');
         }
         $sortStatement = $this->getSortStatement($tableName);
-        $mysqlRandomCharactor = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1';
+        $r = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1)';
         $sql = '
             UPDATE "' . $tableName . '"
-            SET "' . $fieldName . '" = CONCAT(substring(MD5(RAND()),1,3), \'@\', substring(MD5(RAND()),1,2), \'.\', substring(MD5(RAND()),1,2))
+            SET "' . $fieldName . '" = \'\'
+            '.$sortStatement.'
+            LIMIT ' . $limit;
+        $this->executeSql($sql);
+    }
+
+    public function anonymiseField(string $tableName, string $fieldName, ?int $limit = 99999999, ?bool $silent = false)
+    {
+        if($silent === false) {
+            FlushNow::do_flush('Anonymising ' . $tableName . '.' . $fieldName, 'bad');
+        }
+        $sortStatement = $this->getSortStatement($tableName);
+        $r = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1)';
+        $sql = '
+            UPDATE "' . $tableName . '"
+            SET "' . $fieldName . '" = CONCAT('.$r.', '.$r.', '.$r.', \'@\', '.$r.', '.$r.', \'.\', '.$r.')
             '.$sortStatement.'
             LIMIT ' . $limit;
         $this->executeSql($sql);
@@ -38,7 +71,7 @@ class DatabaseActions
 
     public function removeOldRowsFromTable(string $tableName, float $percentageToKeep)
     {
-        FlushNow::do_flush('Removing ' . (100 - round($percentageToKeep * 100, 2)) . '% from '.$tableName, 'bad');
+        FlushNow::do_flush('Deleting Stale Rows ' . (100 - round($percentageToKeep * 100, 2)) . '% from '.$tableName, 'bad');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
         $sortStatement = $this->getSortStatement($tableName);
         $sql = '
@@ -50,7 +83,7 @@ class DatabaseActions
 
     public function removeOldColumnsFromTable(string $tableName, string $fieldName, float $percentageToKeep)
     {
-        FlushNow::do_flush('Removing ' . (100 - round($percentageToKeep * 100, 2)) . '% from '.$tableName . '.' . $fieldName, 'bad');
+        FlushNow::do_flush('Emptying ' . (100 - round($percentageToKeep * 100, 2)) . '% from '.$tableName . '.' . $fieldName, 'bad');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
         $this->truncateField($tableName, $fieldName, $limit, $silent = true);
     }
@@ -93,12 +126,18 @@ class DatabaseActions
 
     protected function executeSql(string $sql)
     {
-        FlushNow::do_flush('Running <pre>' . $sql . '</pre>');
+        if ($this->debug) {
+            FlushNow::do_flush('Running <pre>' . $sql . '</pre>');
+        }
         if ($this->forReal) {
             DB::query($sql);
-            FlushNow::do_flush(' ... done', 'green');
+            if($this->debug) {
+                FlushNow::do_flush(' ... done', 'green');
+            }
         } else {
-            FlushNow::do_flush(' ... not exectuted!', 'green');
+            if($this->debug) {
+                FlushNow::do_flush(' ... not exectuted!', 'green');
+            }
         }
     }
 
@@ -110,4 +149,5 @@ class DatabaseActions
             return '';
         }
     }
+
 }

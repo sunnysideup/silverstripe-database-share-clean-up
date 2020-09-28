@@ -32,6 +32,14 @@ class CleanUp extends BuildTask
 
     protected $forReal = false;
 
+    protected $anonymise = false;
+
+    protected $debug = false;
+
+    protected $removeOld = false;
+
+    protected $data = [];
+
     private static $fields_to_be_cleaned = [];
 
     private static $tables_to_be_cleaned = [
@@ -47,8 +55,6 @@ class CleanUp extends BuildTask
     ];
 
     private static $field_table_combos_to_keep = [];
-
-    private static $days_back = 100;
 
     private static $max_table_size_in_mb = 20;
 
@@ -91,6 +97,7 @@ class CleanUp extends BuildTask
         return Director::isDev();
     }
 
+
     /**
      * Implement this method in the task subclass to
      * execute via the TaskRunner
@@ -99,16 +106,27 @@ class CleanUp extends BuildTask
      */
     public function run($request)
     {
-
-        if ($request->getVar('forreal') === 'yes') {
-            $this->forReal = true;
-            FlushNow::do_flush('<h1>Running in For Real Mode! (for real mode)</h1>', 'bad');
+        $this->forReal = $request->getVar('forreal') ? true : false;
+        $this->anonymise = $request->getVar('anonymise') ? true : false;
+        $this->debug = $request->getVar('debug') ? true : false;
+        $this->removeOld = $request->getVar('removeold') ? true : false;
+        if ($this->forReal) {
+            FlushNow::do_flush('<h1>Running in for real mode</h1>', 'bad');
         } else {
-            FlushNow::do_flush('<h1>Please add ?forreal=yes to run for real!</h1>', 'good');
+            FlushNow::do_flush('<h1>Running in fake mode</h1>', 'good');
         }
+        echo $this->getForm();
 
+        $this->runInner();
+        $this->createTable();
+
+    }
+
+    protected function runInner()
+    {
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
+        $this->database->setDebug($this->debug);
 
         $maxTableSize = $this->Config()->get('max_table_size_in_mb');
         $maxColumnSize = $this->Config()->get('max_column_size_in_mb');
@@ -119,9 +137,14 @@ class CleanUp extends BuildTask
         $tablesToDelete = $this->Config()->get('tables_to_be_cleaned');
         $fieldsToBeCleaned = $this->Config()->get('fields_to_be_cleaned');
 
+        $this->database->deleteAllObsoleteTables();
 
         $tables = $this->database->getAllTables();
         foreach ($tables as $tableName) {
+            $this->data[$tableName] = [
+                'TableName' => $tableName,
+                'SizeBefore' => $this->database->getTableSizeInMegaBytes($tableName),
+            ];
             if (in_array($tableName, $tablesToKeep, true)) {
                 continue;
             }
@@ -129,33 +152,144 @@ class CleanUp extends BuildTask
             //get fields
             $fields = $this->database->getAllFieldsForOneTable($tableName);
 
-            //anonymise
-            $this->anonymiser->AnonymiseTable($tableName, $fields, $this->forReal);
-
-            foreach ($fields as $fieldName) {
-                if(strpos($fieldName, 'ID') !== false) {
-                    continue;
-                }
-                $combo = $tableName . '.' . $fieldName;
-                if (in_array($fieldName, $fieldsToKeep, true)) {
-                    continue;
-                }
-                if (in_array($combo, $fieldTableCombosToKeep, true)) {
-                    continue;
-                }
-                $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
-                if ($columnSize > $maxColumnSize || in_array($fieldName, $fieldsToBeCleaned, true)) {
-                    // $percentageToKeep = $maxColumnSize / $columnSize;
-                    $this->database->removeOldColumnsFromTable($tableName, $fieldName, 0.05);
-                }
+            if($this->anonymise) {
+                //anonymise
+                $this->anonymiser->AnonymiseTable($tableName, $fields, $this->forReal);
             }
 
-            // clean table
-            $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
-            if ($tableSize > $maxTableSize || in_array($tableName, $tablesToDelete, true)) {
-                $percentageToKeep = $maxTableSize / $tableSize;
-                $this->database->removeOldRowsFromTable($tableName, $percentageToKeep);
+            if($this->removeOld) {
+                foreach ($fields as $fieldName) {
+                    if(strpos($fieldName, 'ID') !== false) {
+                        continue;
+                    }
+                    $combo = $tableName . '.' . $fieldName;
+                    if (in_array($fieldName, $fieldsToKeep, true)) {
+                        continue;
+                    }
+                    if (in_array($combo, $fieldTableCombosToKeep, true)) {
+                        continue;
+                    }
+                    $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
+                    if ($columnSize > $maxColumnSize || in_array($fieldName, $fieldsToBeCleaned, true)) {
+                        // $percentageToKeep = $maxColumnSize / $columnSize;
+                        $this->database->removeOldColumnsFromTable($tableName, $fieldName, 0.05);
+                    }
+                }
+
+                // clean table
+                $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
+                if ($tableSize > $maxTableSize || in_array($tableName, $tablesToDelete, true)) {
+                    $percentageToKeep = $maxTableSize / $tableSize;
+                    $this->database->removeOldRowsFromTable($tableName, $percentageToKeep);
+                }
             }
+            $this->data[$tableName]['SizeAfter'] = $this->database->getTableSizeInMegaBytes($tableName);
         }
+    }
+
+    protected function getForm()
+    {
+        $forreal = empty($_GET['forreal']) ? '' : 'checked="checked"';
+        $anonymise = empty($_GET['anonymise']) ? '' : 'checked="checked"';
+        $debug = empty($_GET['debug']) ? '' : 'checked="checked"';
+        $removeOld = empty($_GET['removeold']) ? '' : 'checked="checked"';
+        return <<<html
+            <h1>All sizes in Megabytes</h1>
+            <form method="get" style="
+                background-color: pink;
+                width: 300px;
+                height: 300px;
+                border-radius: 50%;
+                padding: 3vw;
+                position: fixed;
+                right: 20px;
+                top: 20px;
+                border: 1px solid red;
+                "
+            >   <div style="  position: absolute;top: 50%; left: 50%;transform: translate(-50%, -50%);">
+                    <div class="field" style="padding: 10px;">
+                        <input type="checkbox" name="forreal" $forreal />
+                        <label>do it for real?</label>
+                    </div>
+                    <div class="field" style="padding: 10px;">
+                        <input type="checkbox" name="anonymise" $anonymise />
+                        <label>anonymise?</label>
+                    </div>
+                    <div class="field" style="padding: 10px;">
+                        <input type="checkbox" name="debug" $debug />
+                        <label>debug?</label>
+                    </div>
+                    <div class="field" style="padding: 10px;">
+                        <input type="checkbox" name="removeold" $removeOld />
+                        <label>remove old records / fields?</label>
+                    </div>
+                    <div class="field" style="background-color: pink; padding: 1vw;">
+                        <input type="submit" value="run it now ..." />
+                    </div>
+
+                </div>
+            </form>
+
+html;
+    }
+
+    protected function createTable()
+    {
+        $tbody = '';
+        $totalSizeBefore = 0;
+        $totalSizeAfter = 0;
+        usort(
+            $this->data,
+            function($a, $b) {
+                return $a['SizeAfter'] <=> $b['SizeAfter'];
+            }
+        );
+        foreach($this->data as $table =>$data) {
+            $totalSizeBefore += $data['SizeBefore'];
+            $totalSizeAfter += $data['SizeAfter'];
+            $tbody .= '
+                <tr>
+                    <td>
+                        '.$data['TableName'].'
+                    </td>
+                    <td style="text-align: center;">
+                        '.$data['SizeBefore'].'
+                    </td>
+                    <td style="text-align: center;">
+                        '.$data['SizeAfter'].'
+                    </td>
+                </tr>';
+        }
+        $tfoot = '
+                <tr>
+                    <th width="50%">
+                        TOTAL
+                    </th>
+                    <th width="25%">
+                        '.$totalSizeAfter.'
+                    </th>
+                    <th width="25%">
+                        '.$totalSizeAfter.'
+                    </th>
+                </tr>
+        ';
+        echo '<table width="80%" border="1">
+            <thead>
+                <tr>
+                    <th>
+                        Table Name
+                    </th>
+
+                    <th style="text-align: center;">
+                        Before
+                    </th>
+                    <th style="text-align: center;">
+                        After
+                    </th>
+                </tr>
+            </thead>
+            <tfoot>'.$tfoot.'</tfoot>
+            <tbody>'.$tbody.'</tbody>
+        </table>';
     }
 }
