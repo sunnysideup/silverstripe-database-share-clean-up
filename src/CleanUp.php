@@ -118,9 +118,9 @@ class CleanUp extends BuildTask
         $this->database->setDebug($this->debug);
 
         if ($this->forReal) {
-            FlushNow::do_flush('<h1>Running in for real mode</h1>', 'bad');
+            FlushNow::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
         } else {
-            FlushNow::do_flush('<h1>Running in fake mode</h1>', 'good');
+            FlushNow::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
         }
         echo $this->getForm();
 
