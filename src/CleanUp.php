@@ -179,7 +179,11 @@ class CleanUp extends BuildTask
 
                 // clean table
                 $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
-                if ($tableSize > $maxTableSize || in_array($tableName, $tablesToDelete, true)) {
+                $deleteAll = in_array($tableName, $tablesToDelete, true);
+                if($deleteAll) {
+                    $this->database->truncateTable($tableName);
+                }
+                elseif ($tableSize > $maxTableSize) {
                     $percentageToKeep = $maxTableSize / $tableSize;
                     $this->database->removeOldRowsFromTable($tableName, $percentageToKeep);
                 }
