@@ -43,7 +43,7 @@ class CleanUp extends BuildTask
     private static $fields_to_be_cleaned = [];
 
     private static $tables_to_be_cleaned = [
-        'SearchHistory'
+        'LoginAttempt',
     ];
 
     private static $tables_to_keep = [];
@@ -201,33 +201,33 @@ class CleanUp extends BuildTask
                 width: 300px;
                 height: 300px;
                 border-radius: 50%;
-                padding: 3vw;
+                padding: 1vw;
                 position: fixed;
                 right: 20px;
                 top: 20px;
                 border: 1px solid red;
                 "
             >   <div style="  position: absolute;top: 50%; left: 50%;transform: translate(-50%, -50%);">
-                    <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="forreal" $forreal />
-                        <label>do it for real?</label>
-                    </div>
+
                     <div class="field" style="padding: 10px;">
                         <input type="checkbox" name="anonymise" $anonymise />
                         <label>anonymise?</label>
+                    </div>
+                    <div class="field" style="padding: 10px;">
+                        <input type="checkbox" name="removeold" $removeOld />
+                        <label>remove old records / fields?</label>
                     </div>
                     <div class="field" style="padding: 10px;">
                         <input type="checkbox" name="debug" $debug />
                         <label>debug?</label>
                     </div>
                     <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="removeold" $removeOld />
-                        <label>remove old records / fields?</label>
-                    </div>
-                    <div class="field" style="background-color: pink; padding: 1vw;">
                         <input type="submit" value="run it now ..." />
                     </div>
-
+                    <div class="field" style="padding: 10px;">
+                        <input type="checkbox" name="forreal" $forreal />
+                        <label>do it for real?</label>
+                    </div>
                 </div>
             </form>
 
@@ -274,7 +274,7 @@ html;
                     </th>
                 </tr>
         ';
-        echo '<table width="80%" border="1">
+        echo '<table border="1" style="width: calc(100% - 380px);">
             <thead>
                 <tr>
                     <th>
