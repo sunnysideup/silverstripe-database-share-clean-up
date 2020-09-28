@@ -137,7 +137,7 @@ class CleanUp extends BuildTask
         $fieldsToKeep = $this->Config()->get('fields_to_keep');
         $fieldTableCombosToKeep = $this->Config()->get('field_table_combos_to_keep');
 
-        $tablesToDelete = $this->Config()->get('tables_to_be_cleaned');
+        $tablesToBeCleaned = $this->Config()->get('tables_to_be_cleaned');
         $fieldsToBeCleaned = $this->Config()->get('fields_to_be_cleaned');
 
         $this->database->deleteAllObsoleteTables();
@@ -184,7 +184,7 @@ class CleanUp extends BuildTask
             $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
             $deleteAll = in_array($tableName, $tablesToDelete, true);
             if($deleteAll) {
-                $this->database->truncateTable($tableName);
+                $this->database->emptyFieldsRowsFromTable($tableName, 0.01);
             } elseif ($this->removeRows && $tableSize > $maxTableSize) {
                 $percentageToKeep = $maxTableSize / $tableSize;
                 $this->database->emptyFieldsRowsFromTable($tableName, $percentageToKeep);
