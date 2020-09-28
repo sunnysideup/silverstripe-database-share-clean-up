@@ -5,7 +5,33 @@ namespace Sunnysideup\DatabaseShareCleanUp;
 class CleanUp extends BuildTask
 {
 
+    private static $fields_to_be_cleaned = [
+
+    ];
+
+    private static $tables_to_be_cleaned = [
 
 
-    // look for any field called Email / Phone / Address / FirstName /
+    ];
+
+    private static $days_back = 100;
+
+
+    function run()
+    {
+
+    }
+
+    protected function getAllTables()
+    {
+
+    }
+
+
+    protected function getAllFieldsForOneTable()
+    {
+
+    }
+
+
 }
