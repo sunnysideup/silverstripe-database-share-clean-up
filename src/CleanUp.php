@@ -110,6 +110,11 @@ class CleanUp extends BuildTask
         $this->anonymise = $request->getVar('anonymise') ? true : false;
         $this->debug = $request->getVar('debug') ? true : false;
         $this->removeOld = $request->getVar('removeold') ? true : false;
+
+        $this->anonymiser->setDatabaseActions($this->database);
+        $this->database->setForReal($this->forReal);
+        $this->database->setDebug($this->debug);
+
         if ($this->forReal) {
             FlushNow::do_flush('<h1>Running in for real mode</h1>', 'bad');
         } else {
@@ -124,10 +129,6 @@ class CleanUp extends BuildTask
 
     protected function runInner()
     {
-        $this->anonymiser->setDatabaseActions($this->database);
-        $this->database->setForReal($this->forReal);
-        $this->database->setDebug($this->debug);
-
         $maxTableSize = $this->Config()->get('max_table_size_in_mb');
         $maxColumnSize = $this->Config()->get('max_column_size_in_mb');
         $tablesToKeep = $this->Config()->get('tables_to_keep');
