@@ -36,7 +36,9 @@ class CleanUp extends BuildTask
 
     protected $debug = false;
 
-    protected $removeOld = false;
+    protected $emptyFields = false;
+
+    protected $removeRows = false;
 
     protected $data = [];
 
@@ -58,7 +60,7 @@ class CleanUp extends BuildTask
 
     private static $max_table_size_in_mb = 20;
 
-    private static $max_column_size_in_mb = 5;
+    private static $max_column_size_in_mb = 2;
 
     private static $dependencies = [
         'anonymiser' => '%$' . Anonymiser::class,
@@ -109,7 +111,7 @@ class CleanUp extends BuildTask
         $this->forReal = $request->getVar('forreal') ? true : false;
         $this->anonymise = $request->getVar('anonymise') ? true : false;
         $this->debug = $request->getVar('debug') ? true : false;
-        $this->removeOld = $request->getVar('removeold') ? true : false;
+        $this->emptyFields = $request->getVar('emptyfields') ? true : false;
 
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
@@ -158,7 +160,7 @@ class CleanUp extends BuildTask
                 $this->anonymiser->AnonymiseTable($tableName, $fields, $this->forReal);
             }
 
-            if($this->removeOld) {
+            if($this->emptyFields) {
                 foreach ($fields as $fieldName) {
                     if(strpos($fieldName, 'ID') !== false) {
                         continue;
@@ -173,20 +175,19 @@ class CleanUp extends BuildTask
                     $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
                     if ($columnSize > $maxColumnSize || in_array($fieldName, $fieldsToBeCleaned, true)) {
                         // $percentageToKeep = $maxColumnSize / $columnSize;
-                        $this->database->removeOldColumnsFromTable($tableName, $fieldName, 0.05);
+                        $this->database->emptyFieldsColumnsFromTable($tableName, $fieldName, 0.05);
                     }
                 }
+            }
 
-                // clean table
-                $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
-                $deleteAll = in_array($tableName, $tablesToDelete, true);
-                if($deleteAll) {
-                    $this->database->truncateTable($tableName);
-                }
-                elseif ($tableSize > $maxTableSize) {
-                    $percentageToKeep = $maxTableSize / $tableSize;
-                    $this->database->removeOldRowsFromTable($tableName, $percentageToKeep);
-                }
+            // clean table
+            $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
+            $deleteAll = in_array($tableName, $tablesToDelete, true);
+            if($deleteAll) {
+                $this->database->truncateTable($tableName);
+            } elseif ($this->removeRows && $tableSize > $maxTableSize) {
+                $percentageToKeep = $maxTableSize / $tableSize;
+                $this->database->emptyFieldsRowsFromTable($tableName, $percentageToKeep);
             }
             $this->data[$tableName]['SizeAfter'] = $this->database->getTableSizeInMegaBytes($tableName);
         }
@@ -197,7 +198,8 @@ class CleanUp extends BuildTask
         $forreal = empty($_GET['forreal']) ? '' : 'checked="checked"';
         $anonymise = empty($_GET['anonymise']) ? '' : 'checked="checked"';
         $debug = empty($_GET['debug']) ? '' : 'checked="checked"';
-        $removeOld = empty($_GET['removeold']) ? '' : 'checked="checked"';
+        $emptyFields = empty($_GET['emptyfields']) ? '' : 'checked="checked"';
+        $removeRows = empty($_GET['removerows']) ? '' : 'checked="checked"';
         return <<<html
             <h1>All sizes in Megabytes</h1>
             <form method="get" style="
@@ -218,8 +220,12 @@ class CleanUp extends BuildTask
                         <label>anonymise?</label>
                     </div>
                     <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="removeold" $removeOld />
-                        <label>remove old records / fields?</label>
+                        <input type="checkbox" name="emptyfields" $removeRows />
+                        <label>empty large fields?</label>
+                    </div>
+                    <div class="field" style="padding: 10px;">
+                        <input type="checkbox" name="removerows" $emptyFields />
+                        <label>empty large fields?</label>
                     </div>
                     <div class="field" style="padding: 10px;">
                         <input type="checkbox" name="debug" $debug />
