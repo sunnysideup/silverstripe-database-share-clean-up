@@ -30,7 +30,7 @@ class DatabaseActions
         $removeString = 'removed@' . uniqid() . '.' . uniqid();
         $sql = '
             UPDATE "' . $tableName . '"
-            SET "' . $fieldName . '" = CONCAT(substring(MD5(RAND()),1,20), \'@\', substring(MD5(RAND()),1,20), \'.\', substring(MD5(RAND()),1,20))
+            SET "' . $fieldName . '" = CONCAT(substring(MD5(RAND()),1,3), \'@\', substring(MD5(RAND()),1,2), \'.\', substring(MD5(RAND()),1,2))
             '.$sortStatement.'
             LIMIT ' . $limit;
         $this->executeSql($sql);
