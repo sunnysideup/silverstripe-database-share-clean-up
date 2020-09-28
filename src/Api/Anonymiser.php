@@ -70,7 +70,6 @@ class Anonymiser
         $keep = $this->Config()->get('keep_table_field_combos');
         $also = $this->Config()->get('also_remove_table_field_combos');
         if (in_array($tableName, $tables, true)) {
-            FlushNow::do_flush('Truncating ' . $tableName, 'bad');
             $this->databaseActions->truncateTable($tableName);
             return;
         }
@@ -80,13 +79,11 @@ class Anonymiser
                 continue;
             }
             if (in_array($fieldName, $fieldsToDelete, true)) {
-                FlushNow::do_flush('Truncating ' . $tableName . '.' . $fieldName, 'bad');
                 $this->databaseActions->truncateField($tableName, $fieldName);
             }
         }
         foreach ($also as $combo) {
             list($tableName, $fieldName) = explode('.', $combo);
-            FlushNow::do_flush('Truncating ' . $tableName . '.' . $fieldName, 'bad');
             $this->databaseActions->truncateField($tableName, $fieldName);
         }
     }

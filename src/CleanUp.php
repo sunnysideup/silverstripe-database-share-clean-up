@@ -2,6 +2,7 @@
 
 namespace Sunnysideup\DatabaseShareCleanUp;
 
+use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
 
@@ -33,19 +34,25 @@ class CleanUp extends BuildTask
 
     private static $fields_to_be_cleaned = [];
 
-    private static $tables_to_be_cleaned = [];
+    private static $tables_to_be_cleaned = [
+        'SearchHistory'
+    ];
 
     private static $tables_to_keep = [];
 
-    private static $fields_to_keep = [];
+    private static $fields_to_keep = [
+        'ClassName',
+        'Created',
+        'LastEdited',
+    ];
 
     private static $field_table_combos_to_keep = [];
 
     private static $days_back = 100;
 
-    private static $max_table_size_in_mb = 5;
+    private static $max_table_size_in_mb = 20;
 
-    private static $max_column_size_in_mb = 1;
+    private static $max_column_size_in_mb = 5;
 
     private static $dependencies = [
         'anonymiser' => '%$' . Anonymiser::class,
@@ -54,7 +61,19 @@ class CleanUp extends BuildTask
 
     private $anonymiser;
 
+    public function setAnonymiser($a)
+    {
+        $this->anonymiser = $a;
+    }
+
+
     private $database;
+
+    public function setDatabase($b)
+    {
+        $this->database = $b;
+    }
+
 
     /**
      * Set a custom url segment (to follow dev/tasks/)
@@ -80,6 +99,14 @@ class CleanUp extends BuildTask
      */
     public function run($request)
     {
+
+        if ($request->getVar('forreal') === 'yes') {
+            $this->forReal = true;
+            FlushNow::do_flush('<h1>Running in For Real Mode! (for real mode)</h1>', 'bad');
+        } else {
+            FlushNow::do_flush('<h1>Please add ?forreal=yes to run for real!</h1>', 'good');
+        }
+
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
 
@@ -88,12 +115,11 @@ class CleanUp extends BuildTask
         $tablesToKeep = $this->Config()->get('tables_to_keep');
         $fieldsToKeep = $this->Config()->get('fields_to_keep');
         $fieldTableCombosToKeep = $this->Config()->get('field_table_combos_to_keep');
-        if ($request->getVar('forreal') === 'yes') {
-            $this->forReal = true;
-            FlushNow::do_flush('Running in For Real Mode! (for real mode)', 'bad');
-        } else {
-            FlushNow::do_flush('Please add ?forreal=yes to run for real!', 'good');
-        }
+
+        $tablesToDelete = $this->Config()->get('tables_to_be_cleaned');
+        $fieldsToBeCleaned = $this->Config()->get('fields_to_be_cleaned');
+
+
         $tables = $this->database->getAllTables();
         foreach ($tables as $tableName) {
             if (in_array($tableName, $tablesToKeep, true)) {
@@ -107,23 +133,26 @@ class CleanUp extends BuildTask
             $this->anonymiser->AnonymiseTable($tableName, $fields, $this->forReal);
 
             foreach ($fields as $fieldName) {
+                if(strpos($fieldName, 'ID') !== false) {
+                    continue;
+                }
                 $combo = $tableName . '.' . $fieldName;
-                if (in_array($tableName, $fieldsToKeep, true)) {
+                if (in_array($fieldName, $fieldsToKeep, true)) {
                     continue;
                 }
                 if (in_array($combo, $fieldTableCombosToKeep, true)) {
                     continue;
                 }
                 $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
-                if ($maxColumnSize > $columnSize) {
-                    $percentageToKeep = $maxColumnSize / $columnSize;
-                    $this->database->removeOldColumnsFromTable($tableName, $fieldName, $percentageToKeep);
+                if ($columnSize > $maxColumnSize || in_array($fieldName, $fieldsToBeCleaned, true)) {
+                    // $percentageToKeep = $maxColumnSize / $columnSize;
+                    $this->database->removeOldColumnsFromTable($tableName, $fieldName, 0.05);
                 }
             }
 
             // clean table
             $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
-            if ($tableSize > $maxTableSize) {
+            if ($tableSize > $maxTableSize || in_array($tableName, $tablesToDelete, true)) {
                 $percentageToKeep = $maxTableSize / $tableSize;
                 $this->database->removeOldRowsFromTable($tableName, $percentageToKeep);
             }
