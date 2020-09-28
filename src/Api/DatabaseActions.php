@@ -43,7 +43,7 @@ class DatabaseActions
         $sortStatement = $this->getSortStatement($tableName);
         $sql = '
             DELETE FROM "' . $tableName . '"
-            ORDER BY "ID" ASC
+            '.$sortStatement.'
             LIMIT ' . $limit;
         $this->executeSql($sql);
     }
