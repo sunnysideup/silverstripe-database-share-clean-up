@@ -27,7 +27,7 @@ class DatabaseActions
             FlushNow::do_flush('Truncating ' . $tableName . '.' . $fieldName, 'bad');
         }
         $sortStatement = $this->getSortStatement($tableName);
-        $removeString = 'removed@' . uniqid() . '.' . uniqid();
+        $mysqlRandomCharactor = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1';
         $sql = '
             UPDATE "' . $tableName . '"
             SET "' . $fieldName . '" = CONCAT(substring(MD5(RAND()),1,3), \'@\', substring(MD5(RAND()),1,2), \'.\', substring(MD5(RAND()),1,2))
