@@ -71,7 +71,7 @@ class DatabaseActions
 
     public function removeOldRowsFromTable(string $tableName, float $percentageToKeep)
     {
-        FlushNow::do_flush('Deleting ' . (100 - round($percentageToKeep * 100, 2)) . '% or Rows from '.$tableName, 'bad');
+        FlushNow::do_flush('Deleting ' . (100 - round($percentageToKeep * 100, 2)) . '% of the Rows in '.$tableName, 'bad');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
         $sortStatement = $this->getSortStatement($tableName);
         $sql = '
