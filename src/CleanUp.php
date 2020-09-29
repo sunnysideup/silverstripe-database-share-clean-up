@@ -34,19 +34,31 @@ class CleanUp extends BuildTask
 
     protected $anonymise = false;
 
+    protected $removeObsolete = false;
+
+    protected $removeOldVersions = false;
+
     protected $debug = false;
 
     protected $emptyFields = false;
 
     protected $removeRows = false;
 
+    protected $selectedTables = false;
+
+    protected $selectedTableList = [];
+
     protected $data = [];
 
-    private static $fields_to_be_cleaned = [];
+    private static $tables_to_delete_forever = [];
 
     private static $tables_to_be_cleaned = [
         'LoginAttempt',
     ];
+
+    private static $fields_to_be_cleaned = [];
+
+    private static $field_table_comboes_to_be_cleaned = [];
 
     private static $tables_to_keep = [];
 
@@ -56,7 +68,9 @@ class CleanUp extends BuildTask
         'LastEdited',
     ];
 
+
     private static $field_table_combos_to_keep = [];
+
 
     private static $max_table_size_in_mb = 20;
 
@@ -108,10 +122,19 @@ class CleanUp extends BuildTask
      */
     public function run($request)
     {
-        $this->forReal = $request->getVar('forreal') ? true : false;
         $this->anonymise = $request->getVar('anonymise') ? true : false;
-        $this->debug = $request->getVar('debug') ? true : false;
+        $this->removeObsolete = $request->getVar('removeobsolete') ? true : false;
+        $this->removeOldVersions = $request->getVar('removeoldversions') ? true : false;
+        $this->removeRows = $request->getVar('removerows') ? true : false;
         $this->emptyFields = $request->getVar('emptyfields') ? true : false;
+
+        $this->selectedTables = $request->getVar('selectedtables') ? true : false;
+        $this->debug = $request->getVar('debug') ? true : false;
+        $this->forReal = $request->getVar('forreal') ? true : false;
+        if($this->forReal) {
+            $this->debug = true;
+        }
+        $this->selectedTableList = $request->getVar('selectedtablelist') ?? [];
 
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
@@ -122,8 +145,11 @@ class CleanUp extends BuildTask
         } else {
             FlushNow::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
         }
-        echo $this->getForm();
+        if($this->anonymise) {
+            $this->anonymiser->AnonymisePresets();
+        }
 
+        $this->createForm();
         $this->runInner();
         $this->createTable();
 
@@ -133,113 +159,204 @@ class CleanUp extends BuildTask
     {
         $maxTableSize = $this->Config()->get('max_table_size_in_mb');
         $maxColumnSize = $this->Config()->get('max_column_size_in_mb');
+
+        $tablesToDeleteForever = $this->Config()->get('tables_to_delete_forever');
+
         $tablesToKeep = $this->Config()->get('tables_to_keep');
         $fieldsToKeep = $this->Config()->get('fields_to_keep');
         $fieldTableCombosToKeep = $this->Config()->get('field_table_combos_to_keep');
 
         $tablesToBeCleaned = $this->Config()->get('tables_to_be_cleaned');
         $fieldsToBeCleaned = $this->Config()->get('fields_to_be_cleaned');
-
-        $this->database->deleteAllObsoleteTables();
+        $tableFieldCombosToBeCleaned = $this->Config()->get('field_table_comboes_to_be_cleaned');
 
         $tables = $this->database->getAllTables();
         foreach ($tables as $tableName) {
             $this->data[$tableName] = [
                 'TableName' => $tableName,
                 'SizeBefore' => $this->database->getTableSizeInMegaBytes($tableName),
+                'SizeAfter' => 0,
+                'Actions' => [],
             ];
+
             if (in_array($tableName, $tablesToKeep, true)) {
+                if($this->debug) {
+                    $this->data[$tableName]['Actions'][] = 'Skipped because it is in list of tables to keep.';
+                }
+                continue;
+            }
+            if ($this->selectedTables && ! in_array($tableName, $this->selectedTableList, true)) {
+                $this->data[$tableName]['Actions'][] =  'Skipped because it is not a selected table.';
                 continue;
             }
 
-            //get fields
-            $fields = $this->database->getAllFieldsForOneTable($tableName);
-
-            if($this->anonymise) {
-                //anonymise
-                $this->anonymiser->AnonymiseTable($tableName, $fields, $this->forReal);
-            }
-
-            if($this->emptyFields) {
-                foreach ($fields as $fieldName) {
-                    if(strpos($fieldName, 'ID') !== false) {
-                        continue;
-                    }
-                    $combo = $tableName . '.' . $fieldName;
-                    if (in_array($fieldName, $fieldsToKeep, true)) {
-                        continue;
-                    }
-                    if (in_array($combo, $fieldTableCombosToKeep, true)) {
-                        continue;
-                    }
-                    $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
-                    if ($columnSize > $maxColumnSize || in_array($fieldName, $fieldsToBeCleaned, true)) {
-                        // $percentageToKeep = $maxColumnSize / $columnSize;
-                        $this->database->emptyFieldsColumnsFromTable($tableName, $fieldName, 0.05);
+            if ($this->removeObsolete) {
+                if (in_array($tableName, $tablesToDeleteForever, true)) {
+                    $this->database->deleteTable($tableName);
+                    $this->data[$tableName]['Actions'][] = 'DELETING FOREVER.';
+                    continue;
+                } else {
+                    $outcome = $this->database->deleteObsoleteTables($tableName);
+                    if($outcome) {
+                        $this->data[$tableName]['Actions'][] = 'Deleted because it is obsolete.';
                     }
                 }
             }
 
+            if($this->removeOldVersions) {
+                $outcome = $this->database->emptyVersionedTable($tableName);
+                if($outcome) {
+                    $this->data[$tableName]['Actions'][] = 'Remove all and replace with one entry for each record.';
+                }
+            }
+
+
+            if($this->anonymise) {
+                $outcome = $this->anonymiser->AnonymiseTable($tableName);
+                if($outcome) {
+                    $this->data[$tableName]['Actions'][] = 'Anonymised Table.';
+                }
+            }
+            //get fields
+            $fields = $this->database->getAllFieldsForOneTable($tableName);
+
+
+            foreach ($fields as $fieldName) {
+                if(substr($fieldName, -2) ===  'ID') {
+                    if($this->debug) {
+                        $this->data[$tableName]['Actions'][] = ' ... '.$fieldName.': skipping!';
+                    }
+                    continue;
+                }
+                if (in_array($fieldName, $fieldsToKeep, true)) {
+                    if($this->debug) {
+                        $this->data[$tableName]['Actions'][] = ' ... '.$fieldName.': skipping!';
+                    }
+                    continue;
+                }
+
+                $combo = $tableName . '.' . $fieldName;
+                if (in_array($combo, $fieldTableCombosToKeep, true)) {
+                    if($this->debug) {
+                        $this->data[$tableName]['Actions'][] = ' ... '.$fieldName.': skipping.';
+                    }
+                    continue;
+                }
+                if($this->anonymise) {
+                    $outcome = $this->anonymiser->AnonymiseTableField($tableName, $fieldName);
+                    if($outcome) {
+                        $this->data[$tableName]['Actions'][] = ' ... '.$fieldName.': anonymised.';
+                    }
+                }
+                if($this->emptyFields) {
+                    $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
+                    $test1 = $columnSize > $maxColumnSize;
+                    $test2 = in_array($fieldName, $fieldsToBeCleaned, true);
+                    $test3 = in_array($combo, $tableFieldCombosToBeCleaned, true);
+                    if ($test1 || $test2 || $test3) {
+                        if($test2 || $test3) {
+                            $percentageToKeep = 0;
+                        } else {
+                            $percentageToKeep = $maxColumnSize / $columnSize;
+                        }
+                        $outcome = $this->database->removeOldColumnsFromTable($tableName, $fieldName, $percentageToKeep);
+                        if($outcome) {
+                            $this->data[$tableName]['Actions'][] = ' ... '.$fieldName.': Removed most rows.';
+                        }
+
+                    }
+                }
+            }
+
+
             // clean table
-            $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
-            $deleteAll = in_array($tableName, $tablesToDelete, true);
-            if($deleteAll) {
-                $this->database->emptyFieldsRowsFromTable($tableName, 0.01);
-            } elseif ($this->removeRows && $tableSize > $maxTableSize) {
-                $percentageToKeep = $maxTableSize / $tableSize;
-                $this->database->emptyFieldsRowsFromTable($tableName, $percentageToKeep);
+            if($this->removeRows) {
+                $removeAllRows = in_array($tableName, $tablesToBeCleaned, true);
+                if($removeAllRows) {
+                    $this->database->removeOldRowsFromTable($tableName, 0.01);
+                    $this->data[$tableName]['Actions'][] = 'Removed most rows.';
+                } else {
+                    $tableSize = $this->database->getTableSizeInMegaBytes($tableName);
+                    if ($tableSize > $maxTableSize) {
+                        $percentageToKeep = $maxTableSize / $tableSize;
+                        $this->database->removeOldRowsFromTable($tableName, $percentageToKeep);
+                        $this->data[$tableName]['Actions'][] = 'Removed old rows.';
+                    }
+                }
             }
             $this->data[$tableName]['SizeAfter'] = $this->database->getTableSizeInMegaBytes($tableName);
         }
     }
 
-    protected function getForm()
+    protected function createForm()
     {
-        $forreal = empty($_GET['forreal']) ? '' : 'checked="checked"';
-        $anonymise = empty($_GET['anonymise']) ? '' : 'checked="checked"';
-        $debug = empty($_GET['debug']) ? '' : 'checked="checked"';
-        $emptyFields = empty($_GET['emptyfields']) ? '' : 'checked="checked"';
-        $removeRows = empty($_GET['removerows']) ? '' : 'checked="checked"';
-        return <<<html
-            <h1>All sizes in Megabytes</h1>
-            <form method="get" style="
+        $anonymise = $this->anonymise ? 'checked="checked"' : '' ;
+        $removeObsolete = $this->removeObsolete ?'checked="checked"' : '' ;
+        $removeOldVersions = $this->removeOldVersions ? 'checked="checked"' : '' ;
+        $removeRows = $this->removeRows ? 'checked="checked"' : '' ;
+        $emptyFields = $this->emptyFields ? 'checked="checked"' : '' ;
+        $selectedTables = $this->selectedTables ? 'checked="checked"' : '' ;
+        $forReal = $this->forReal ? 'checked="checked"' : '' ;
+        $debug = $this->debug ? 'checked="checked"' : '' ;
+        echo <<<html
+        <h3>All sizes in Megabytes</h3>
+        <form method="get">
+            <div style="
                 background-color: pink;
                 width: 300px;
-                height: 300px;
-                border-radius: 50%;
                 padding: 1vw;
                 position: fixed;
-                right: 20px;
-                top: 20px;
+                right: 0;
+                top: 0;
+                bottom: 0;
                 border: 1px solid red;
-                "
-            >   <div style="  position: absolute;top: 50%; left: 50%;transform: translate(-50%, -50%);">
-
-                    <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="anonymise" $anonymise />
-                        <label>anonymise?</label>
-                    </div>
-                    <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="emptyfields" $removeRows />
-                        <label>empty large fields?</label>
-                    </div>
-                    <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="removerows" $emptyFields />
-                        <label>empty large fields?</label>
-                    </div>
-                    <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="debug" $debug />
-                        <label>debug?</label>
-                    </div>
-                    <div class="field" style="padding: 10px;">
-                        <input type="submit" value="run it now ..." />
-                    </div>
-                    <div class="field" style="padding: 10px;">
-                        <input type="checkbox" name="forreal" $forreal />
-                        <label>do it for real?</label>
-                    </div>
+            ">
+                <h4>What actions to take?</h4>
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="anonymise" $anonymise />
+                    <label>anonymise</label>
                 </div>
-            </form>
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="removeoldversions" $removeOldVersions />
+                    <label>remove versioned table entries</label>
+                </div>
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="removeobsolete" $removeObsolete />
+                    <label>remove obsolete tables</label>
+                </div>
+
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="emptyfields" $emptyFields />
+                    <label>empty large fields</label>
+                </div>
+
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="removerows" $removeRows />
+                    <label>remove old rows if there are too many (not recommended)</label>
+                </div>
+
+                <hr />
+                <h4>How to apply?</h4>
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="selectedtables" $selectedTables />
+                    <label>apply to selected tables only?</label>
+                </div>
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="forreal" $forReal />
+                    <label>do it for real?</label>
+                </div>
+                <hr />
+                <h4>See more info?</h4>
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="debug" $debug />
+                    <label>debug</label>
+                </div>
+                <hr />
+                <div class="field" style="padding: 10px;">
+                    <input type="submit" value="let's do it!" />
+                </div>
+            </div>
+
 
 html;
     }
@@ -255,13 +372,27 @@ html;
                 return $a['SizeAfter'] <=> $b['SizeAfter'];
             }
         );
-        foreach($this->data as $table =>$data) {
+        foreach($this->data as $data) {
             $totalSizeBefore += $data['SizeBefore'];
             $totalSizeAfter += $data['SizeAfter'];
+            $actions = '';
+            if(count($data['Actions'])) {
+                $actions = '
+                        <ul>
+                            <li>
+                            '.implode('</li><li>', $data['Actions']).'
+                            </li>
+                        </ul>';
+            }
+            $tableList = empty($this->selectedTableList[$data['TableName']]) ? '' : 'checked="checked"';
             $tbody .= '
                 <tr>
                     <td>
+                        <input type="checkbox" name="selectedtablelist[]" value="'.$data['TableName'].'" '.$tableList.' />
+                    </td>
+                    <td>
                         '.$data['TableName'].'
+                        '.$actions.'
                     </td>
                     <td style="text-align: center;">
                         '.$data['SizeBefore'].'
@@ -273,34 +404,41 @@ html;
         }
         $tfoot = '
                 <tr>
-                    <th width="50%">
+                    <th>
+                        &nbsp;
+                    </th>
+                    <th>
                         TOTAL
                     </th>
-                    <th width="25%">
+                    <th>
                         '.$totalSizeAfter.'
                     </th>
-                    <th width="25%">
+                    <th>
                         '.$totalSizeAfter.'
                     </th>
                 </tr>
         ';
-        echo '<table border="1" style="width: calc(100% - 380px);">
+        echo '
+        <table border="1" style="width: calc(100% - 380px);">
             <thead>
                 <tr>
-                    <th>
+                    <th width="5%">
+                        Select
+                    </th>
+                    <th width="65%">
                         Table Name
                     </th>
-
-                    <th style="text-align: center;">
+                    <th style="text-align: center;" width="15%">
                         Before
                     </th>
-                    <th style="text-align: center;">
+                    <th style="text-align: center;" width="15%">
                         After
                     </th>
                 </tr>
             </thead>
             <tfoot>'.$tfoot.'</tfoot>
             <tbody>'.$tbody.'</tbody>
-        </table>';
+        </table>
+    </form>';
     }
 }

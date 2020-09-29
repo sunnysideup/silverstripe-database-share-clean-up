@@ -20,24 +20,22 @@ class Anonymiser
      */
     private static $fields_to_anonymise = [
         'Email',
-        'EmailAddress',
+        'Email',
         'Username',
         'City',
         'Suburb',
-        'Suburb',
         'Address',
-        'Address1',
-        'Address2',
         'Phone',
-        'PhoneNumber',
         'Mobile',
         'FirstName',
         'Surname',
+        'LastName',
         'Fax',
-        'Age',
         'Dob',
-        'DataOfBirth',
+        'DOB',
+        'DateOfBirth',
         'Ip',
+        'IP',
         'IpAddress',
     ];
 
@@ -48,6 +46,10 @@ class Anonymiser
         'MemberPassword',
     ];
 
+    /**
+     * @var array
+     */
+    private static $tables_to_keep = [];
     /**
      * specify tables with fields that are not to be deleted
      * e.g.
@@ -68,28 +70,43 @@ class Anonymiser
         $this->databaseActions = $databaseActions;
     }
 
-    public function AnonymiseTable(string $tableName, array $fieldList, ?bool $forReal = false)
+    public function AnonymiseTable(string $tableName) : bool
     {
-        $fieldsToDelete = $this->Config()->get('fields_to_anonymise');
         $tables = $this->Config()->get('tables_to_remove');
-        $keep = $this->Config()->get('keep_table_field_combos');
-        $also = $this->Config()->get('also_remove_table_field_combos');
         if (in_array($tableName, $tables, true)) {
             $this->databaseActions->truncateTable($tableName);
-            return;
+            return true;
         }
-        foreach ($fieldList as $fieldName) {
-            $combo = $tableName . '.' . $fieldName;
-            if (in_array($fieldName, $keep, true)) {
-                continue;
-            }
-            if (in_array($fieldName, $fieldsToDelete, true)) {
-                $this->databaseActions->anonymiseField($tableName, $fieldName);
+        return false;
+    }
+
+    public function AnonymiseTableField(string $tableName, string $fieldName) : bool
+    {
+        if (in_array($tableName, $this->Config()->get('tables_to_keep'), true)) {
+            return false;
+        }
+        $keepCombos = $this->Config()->get('keep_table_field_combos');
+
+        $combo = $tableName . '.' . $fieldName;
+        if (in_array($fieldName, $keepCombos, true)) {
+            return false;
+        }
+
+        $fieldsToDelete = $this->Config()->get('fields_to_anonymise');
+        foreach($fieldsToDelete as $fieldTest) {
+            if(strpos($fieldName, $fieldTest) !== false) {
+                return $this->databaseActions->anonymiseField($tableName, $fieldName);
             }
         }
+        return false;
+    }
+
+    public function AnonymisePresets()
+    {
+        $also = $this->Config()->get('also_remove_table_field_combos');
         foreach ($also as $combo) {
             list($tableName, $fieldName) = explode('.', $combo);
-            $this->databaseActions->truncateField($tableName, $fieldName);
+            $this->databaseActions->anonymiseField($tableName, $fieldName);
         }
     }
 

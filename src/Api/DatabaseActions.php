@@ -7,6 +7,12 @@ use Sunnysideup\Flush\FlushNow;
 
 class DatabaseActions
 {
+
+    protected const TEXT_FIELDS = [
+        'varchar',
+        'mediumtext',
+    ];
+
     protected $forReal = false;
 
     protected $debug = false;
@@ -20,58 +26,102 @@ class DatabaseActions
         $this->debug = $bool;
     }
 
-    public function deleteAllObsoleteTables()
+    public function emptyVersionedTable(string $tableName) : bool
     {
-        $tables = $this->getAllTables();
-        foreach($tables as $table) {
-            if(strpos($table, '_obsolete_') === 0) {
-                FlushNow::do_flush('Deleting '.$table .' as it is obsolete', 'deleted');
-                $sql = 'DROP TABLE "'.$table.'";';
+        if(substr($tableName, -9) === '_Versions') {
+            $nonVersionedTable = substr($tableName, 0, strlen($tableName) - 9);
+            if($this->hasTable($nonVersionedTable)) {
+
+                $this->truncateTable($tableName);
+                $fields = $this->getAllFieldsForOneTable($nonVersionedTable);
+                $fields = array_combine($fields, $fields);
+                foreach($fields as $fieldName){
+                    if(! ($this->hasField($tableName, $fieldName) &&  $this->hasField($nonVersionedTable, $fieldName))) {
+                        unset($fields[$fieldName]);
+                    }
+                }
+                $fields['ID'] = 'RecordID';
+                unset($fields['Version']);
+                $fields['VERSION_NUMBER_HERE'] = 'Version';
+                $sql = '
+                    INSERT INTO "'.$tableName.'" ("'.implode('", "', $fields).'")
+                    SELECT "'.implode('", "', array_keys($fields)).'" FROM "'.$nonVersionedTable.'";';
+                $sql = str_replace('"VERSION_NUMBER_HERE"', '1', $sql);
+                $this->debugFlush('Copying unversioned from '.$nonVersionedTable .' into ' . $tableName, 'info');
                 $this->executeSql($sql);
+                return true;
+            } else {
+                FlushNow::do_flush('ERROR: could not find: '.$nonVersionedTable, 'bad');
             }
         }
+        return false;
     }
+
+    public function deleteObsoleteTables(string $tableName) : bool
+    {
+        if(strpos($tableName, '_obsolete_') === 0) {
+            $this->deleteTable($tableName);
+            return true;
+        }
+        return false;
+    }
+
+    public function deleteTable(string $tableName)
+    {
+        $this->debugFlush('Deleting '.$tableName .' as it is not required', 'deleted');
+        $sql = 'DROP TABLE "'.$tableName.'";';
+        $this->executeSql($sql);
+    }
+
 
     public function truncateTable(string $tableName)
     {
-        FlushNow::do_flush('Emptying ' . $tableName, 'bad');
+        $this->debugFlush('Emptying ' . $tableName, 'changed');
         $sql = 'TRUNCATE TABLE "' . $tableName . '"; ';
         $this->executeSql($sql);
     }
 
-    public function truncateField(string $tableName, string $fieldName, ?int $limit = 99999999, ?bool $silent = false)
+    public function truncateField(string $tableName, string $fieldName, ?int $limit = 99999999, ?bool $silent = false) : bool
     {
-        if($silent === false) {
-            FlushNow::do_flush('Emptying ' . $tableName . '.' . $fieldName, 'bad');
+        if($this->isTextField($tableName, $fieldName)) {
+            if($silent === false) {
+                $this->debugFlush('Emptying ' . $tableName . '.' . $fieldName, 'obsolete');
+            }
+            $sortStatement = $this->getSortStatement($tableName);
+            $sql = '
+                UPDATE "' . $tableName . '"
+                SET "' . $fieldName . '" = \'\'
+                '.$sortStatement.'
+                LIMIT ' . $limit;
+            $this->executeSql($sql);
+            return true;
+        } else {
+            $this->debugFlush('Skipping emptying ' . $tableName . '.' . $fieldName . ' as this is not a text field', 'info');
         }
-        $sortStatement = $this->getSortStatement($tableName);
-        $r = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1)';
-        $sql = '
-            UPDATE "' . $tableName . '"
-            SET "' . $fieldName . '" = \'\'
-            '.$sortStatement.'
-            LIMIT ' . $limit;
-        $this->executeSql($sql);
+        return false;
     }
 
-    public function anonymiseField(string $tableName, string $fieldName, ?int $limit = 99999999, ?bool $silent = false)
+    public function anonymiseField(string $tableName, string $fieldName) : bool
     {
-        if($silent === false) {
-            FlushNow::do_flush('Anonymising ' . $tableName . '.' . $fieldName, 'bad');
+        if($this->isTextField($tableName, $fieldName)) {
+            $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
+            $sortStatement = $this->getSortStatement($tableName);
+            $r = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1)';
+            $sql = '
+                UPDATE "' . $tableName . '"
+                SET "' . $fieldName . '" = CONCAT('.$r.', '.$r.', '.$r.', \'@\', '.$r.', '.$r.', \'.\', '.$r.')
+                WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+            $this->executeSql($sql);
+            return true;
+        } else {
+            $this->debugFlush('Skipping anonymising ' . $tableName . '.' . $fieldName . ' as this is not a text field', 'info');
         }
-        $sortStatement = $this->getSortStatement($tableName);
-        $r = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1)';
-        $sql = '
-            UPDATE "' . $tableName . '"
-            SET "' . $fieldName . '" = CONCAT('.$r.', '.$r.', '.$r.', \'@\', '.$r.', '.$r.', \'.\', '.$r.')
-            '.$sortStatement.'
-            LIMIT ' . $limit;
-        $this->executeSql($sql);
+        return false;
     }
 
     public function removeOldRowsFromTable(string $tableName, float $percentageToKeep)
     {
-        FlushNow::do_flush('Deleting ' . (100 - round($percentageToKeep * 100, 2)) . '% of the Rows in '.$tableName, 'bad');
+        $this->debugFlush('Deleting ' . (100 - round($percentageToKeep * 100, 2)) . '% of the Rows in '.$tableName, 'obsolete');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
         $sortStatement = $this->getSortStatement($tableName);
         $sql = '
@@ -81,27 +131,59 @@ class DatabaseActions
         $this->executeSql($sql);
     }
 
-    public function removeOldColumnsFromTable(string $tableName, string $fieldName, float $percentageToKeep)
+    public function removeOldColumnsFromTable(string $tableName, string $fieldName, float $percentageToKeep) : bool
     {
-        FlushNow::do_flush('Emptying ' . (100 - round($percentageToKeep * 100, 2)) . '% from '.$tableName . '.' . $fieldName, 'bad');
+        $this->debugFlush('Emptying ' . (100 - round($percentageToKeep * 100, 2)) . '% from '.$tableName . '.' . $fieldName, 'obsolete');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
-        $this->truncateField($tableName, $fieldName, $limit, $silent = true);
+        return $this->truncateField($tableName, $fieldName, $limit, $silent = true);
     }
 
-    public function getAllTables(): array
+    protected static $tableList = [];
+
+    public function getAllTables(?bool $fresh = true): array
     {
-        return DB::table_list();
+        if($fresh || count(self::$tableList) === 0) {
+            self::$tableList = DB::table_list();
+        }
+        return self::$tableList;
     }
 
     public function getAllFieldsForOneTable(string $tableName): array
     {
-        return array_keys(DB::field_list($tableName));
+        return array_keys($this->getAllFieldsForOneTableDetails($tableName));
+    }
+
+    protected static $fieldsForTable = [];
+
+    public function getAllFieldsForOneTableDetails(string $tableName): array
+    {
+        if(! isset(self::$fieldsForTable[$tableName])) {
+            self::$fieldsForTable[$tableName] = [];
+            if($this->hasTable($tableName)) {
+                self::$fieldsForTable[$tableName] = DB::field_list($tableName);
+            }
+        }
+        return self::$fieldsForTable[$tableName];
+    }
+
+    protected function isTextField(string $tableName, string $fieldName)
+    {
+        $details = $this->getAllFieldsForOneTableDetails($tableName);
+        if(isset($details[$fieldName])) {
+            foreach(self::TEXT_FIELDS as $test) {
+                if(stripos($details[$fieldName], $test) === 0) {
+                    return true;
+                }
+            }
+        } else {
+            FlushNow::do_flush('ERROR: could not find: ' . $tableName . '.' . $fieldName, 'bad');
+        }
     }
 
     public function getTableSizeInMegaBytes(string $tableName): float
     {
         return floatval(DB::query('
-            SELECT  round(((data_length + index_length) / 1024 / 1024), 2) as SIZE
+            SELECT  round(((data_length + index_length - data_free) / 1024 / 1024), 2) as SIZE
             FROM information_schema.TABLES
             WHERE
                 table_schema = \'' . DB::get_conn()->getSelectedDatabase() . '\'
@@ -126,27 +208,38 @@ class DatabaseActions
 
     protected function executeSql(string $sql)
     {
-        if ($this->debug) {
-            FlushNow::do_flush('Running <pre>' . $sql . '</pre>');
-        }
+        $this->debugFlush('Running <pre>' . $sql . '</pre>', 'info');
         if ($this->forReal) {
             DB::query($sql);
-            if($this->debug) {
-                FlushNow::do_flush(' ... done', 'green');
-            }
+            $this->debugFlush(' ... done', 'green');
         } else {
-            if($this->debug) {
-                FlushNow::do_flush(' ... not exectuted!', 'green');
-            }
+            $this->debugFlush(' ... not exectuted!', 'info');
         }
     }
 
     protected function getSortStatement(string $tableName) : string
     {
-        if (DB::get_schema()->hasField($tableName, 'ID')) {
+        if ($this->hasField($tableName, 'ID')) {
             return 'ORDER BY "ID" ASC';
         } else {
             return '';
+        }
+    }
+
+    protected function hasField(string $tableName, string $fieldName) : bool
+    {
+        return (bool) DB::get_schema()->hasField($tableName, $fieldName);
+    }
+
+    protected function hasTable(string $tableName) : bool
+    {
+        return (bool) DB::get_schema()->hasTable($tableName);
+    }
+
+    protected function debugFlush(string $message, string $type)
+    {
+        if($this->debug) {
+            FlushNow::do_flush($message, $type);
         }
     }
 
