@@ -174,8 +174,8 @@ class CleanUp extends BuildTask
         foreach ($tables as $tableName) {
             $this->data[$tableName] = [
                 'TableName' => $tableName,
-                'SizeBefore' => $this->database->getTableSizeInMegaBytes($tableName),
                 'SizeAfter' => 0,
+                'SizeBefore' => 0,
                 'Actions' => [],
             ];
 
@@ -185,6 +185,13 @@ class CleanUp extends BuildTask
                 }
                 continue;
             }
+            if ($this->database->isEmptyTable($tableName)) {
+                if($this->debug) {
+                    $this->data[$tableName]['Actions'][] = 'Skipped because table is empty.';
+                }
+                continue;
+            }
+            $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
             if ($this->selectedTables && ! in_array($tableName, $this->selectedTableList, true)) {
                 $this->data[$tableName]['Actions'][] =  'Skipped because it is not a selected table.';
                 continue;

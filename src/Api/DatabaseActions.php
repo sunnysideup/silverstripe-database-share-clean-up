@@ -180,10 +180,20 @@ class DatabaseActions
         }
     }
 
+    public function isEmptyTable(string $tableName) : bool
+    {
+        return $this->countRows($tableName) === 0;
+    }
+
+    public function countRows(string $tableName) : int
+    {
+        return intval(DB::query('SELECT COUNT(*) FROM "'.$tableName.'";')->value());
+    }
+
     public function getTableSizeInMegaBytes(string $tableName): float
     {
         return floatval(DB::query('
-            SELECT  round(((data_length + index_length - data_free) / 1024 / 1024), 2) as SIZE
+            SELECT  round(((data_length + index_length ) / 1024 / 1024), 2) as C
             FROM information_schema.TABLES
             WHERE
                 table_schema = \'' . DB::get_conn()->getSelectedDatabase() . '\'
