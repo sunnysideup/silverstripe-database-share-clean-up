@@ -5,7 +5,6 @@ namespace Sunnysideup\DatabaseShareCleanUp\Api;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
-use Sunnysideup\Flush\FlushNow;
 
 class Anonymiser
 {
@@ -50,6 +49,7 @@ class Anonymiser
      * @var array
      */
     private static $tables_to_keep = [];
+
     /**
      * specify tables with fields that are not to be deleted
      * e.g.
@@ -70,7 +70,7 @@ class Anonymiser
         $this->databaseActions = $databaseActions;
     }
 
-    public function AnonymiseTable(string $tableName) : bool
+    public function AnonymiseTable(string $tableName): bool
     {
         $tables = $this->Config()->get('tables_to_remove');
         if (in_array($tableName, $tables, true)) {
@@ -80,21 +80,21 @@ class Anonymiser
         return false;
     }
 
-    public function AnonymiseTableField(string $tableName, string $fieldName) : bool
+    public function AnonymiseTableField(string $tableName, string $fieldName): bool
     {
         if (in_array($tableName, $this->Config()->get('tables_to_keep'), true)) {
             return false;
         }
         $keepCombos = $this->Config()->get('keep_table_field_combos');
 
-        $combo = $tableName . '.' . $fieldName;
+        // $combo = $tableName . '.' . $fieldName;
         if (in_array($fieldName, $keepCombos, true)) {
             return false;
         }
 
         $fieldsToDelete = $this->Config()->get('fields_to_anonymise');
-        foreach($fieldsToDelete as $fieldTest) {
-            if(strpos($fieldName, $fieldTest) !== false) {
+        foreach ($fieldsToDelete as $fieldTest) {
+            if (strpos($fieldName, $fieldTest) !== false) {
                 return $this->databaseActions->anonymiseField($tableName, $fieldName);
             }
         }
