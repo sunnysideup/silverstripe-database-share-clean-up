@@ -12,7 +12,10 @@
         "reduce size",
         "gigabytes",
         "share",
-        "anonimise",
+        "anonymise",
+        "anonymize",
+        "anonymised",
+        "anonymized",        
         "Data anonymization"
     ],
     "license": "BSD-3-Clause",
