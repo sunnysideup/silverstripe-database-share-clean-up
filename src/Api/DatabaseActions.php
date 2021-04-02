@@ -7,6 +7,9 @@ use Sunnysideup\Flush\FlushNow;
 
 class DatabaseActions
 {
+    /**
+     * @var string[]
+     */
     protected const TEXT_FIELDS = [
         'varchar',
         'mediumtext',
@@ -107,10 +110,10 @@ class DatabaseActions
         if ($this->isTextField($tableName, $fieldName)) {
             $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
             // $sortStatement = $this->getSortStatement($tableName);
-            $r = 'SUBSTR(\'0123456789abcdefghihjlmnopqrstuvwxyz\',(RAND()*35)+1,1)';
+            $r = "SUBSTR('0123456789abcdefghihjlmnopqrstuvwxyz',(RAND()*35)+1,1)";
             $sql = '
                 UPDATE "' . $tableName . '"
-                SET "' . $fieldName . '" = CONCAT(' . $r . ', ' . $r . ', ' . $r . ', \'@\', ' . $r . ', ' . $r . ', \'.\', ' . $r . ')
+                SET "' . $fieldName . '" = CONCAT(' . $r . ', ' . $r . ', ' . $r . ", '@', " . $r . ', ' . $r . ", '.', " . $r . ')
                 WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
             $this->executeSql($sql);
             return true;
@@ -170,7 +173,7 @@ class DatabaseActions
 
     public function countRows(string $tableName): int
     {
-        return intval(DB::query('SELECT COUNT(*) FROM "' . $tableName . '";')->value());
+        return (int) DB::query('SELECT COUNT(*) FROM "' . $tableName . '";')->value();
     }
 
     public function getTableSizeInMegaBytes(string $tableName): float

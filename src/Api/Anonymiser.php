@@ -12,7 +12,9 @@ class Anonymiser
     use Configurable;
     use Extensible;
 
-    protected $databaseAction = null;
+    public $databaseActions;
+
+    protected $databaseAction;
 
     /**
      * @var array

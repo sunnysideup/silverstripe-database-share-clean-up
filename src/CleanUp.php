@@ -117,15 +117,15 @@ class CleanUp extends BuildTask
      */
     public function run($request)
     {
-        $this->anonymise = $request->getVar('anonymise') ? true : false;
-        $this->removeObsolete = $request->getVar('removeobsolete') ? true : false;
-        $this->removeOldVersions = $request->getVar('removeoldversions') ? true : false;
-        $this->removeRows = $request->getVar('removerows') ? true : false;
-        $this->emptyFields = $request->getVar('emptyfields') ? true : false;
+        $this->anonymise = (bool) $request->getVar('anonymise');
+        $this->removeObsolete = (bool) $request->getVar('removeobsolete');
+        $this->removeOldVersions = (bool) $request->getVar('removeoldversions');
+        $this->removeRows = (bool) $request->getVar('removerows');
+        $this->emptyFields = (bool) $request->getVar('emptyfields');
 
-        $this->selectedTables = $request->getVar('selectedtables') ? true : false;
-        $this->debug = $request->getVar('debug') ? true : false;
-        $this->forReal = $request->getVar('forreal') ? true : false;
+        $this->selectedTables = (bool) $request->getVar('selectedtables');
+        $this->debug = (bool) $request->getVar('debug');
+        $this->forReal = (bool) $request->getVar('forreal');
         if ($this->forReal) {
             $this->debug = true;
         }
@@ -252,11 +252,7 @@ class CleanUp extends BuildTask
                     $test2 = in_array($fieldName, $fieldsToBeCleaned, true);
                     $test3 = in_array($combo, $tableFieldCombosToBeCleaned, true);
                     if ($test1 || $test2 || $test3) {
-                        if ($test2 || $test3) {
-                            $percentageToKeep = 0;
-                        } else {
-                            $percentageToKeep = $maxColumnSize / $columnSize;
-                        }
+                        $percentageToKeep = $test2 || $test3 ? 0 : $maxColumnSize / $columnSize;
                         $outcome = $this->database->removeOldColumnsFromTable($tableName, $fieldName, $percentageToKeep);
                         if ($outcome) {
                             $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': Removed most rows.';
@@ -309,42 +305,42 @@ class CleanUp extends BuildTask
             ">
                 <h4>What actions to take?</h4>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="anonymise" ${anonymise} />
+                    <input type="checkbox" name="anonymise" {$anonymise} />
                     <label>anonymise</label>
                 </div>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="removeoldversions" ${removeOldVersions} />
+                    <input type="checkbox" name="removeoldversions" {$removeOldVersions} />
                     <label>remove versioned table entries</label>
                 </div>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="removeobsolete" ${removeObsolete} />
+                    <input type="checkbox" name="removeobsolete" {$removeObsolete} />
                     <label>remove obsolete tables</label>
                 </div>
 
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="emptyfields" ${emptyFields} />
+                    <input type="checkbox" name="emptyfields" {$emptyFields} />
                     <label>empty large fields</label>
                 </div>
 
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="removerows" ${removeRows} />
+                    <input type="checkbox" name="removerows" {$removeRows} />
                     <label>remove old rows if there are too many (not recommended)</label>
                 </div>
 
                 <hr />
                 <h4>How to apply?</h4>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="selectedtables" ${selectedTables} />
+                    <input type="checkbox" name="selectedtables" {$selectedTables} />
                     <label>apply to selected tables only?</label>
                 </div>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="forreal" ${forReal} />
+                    <input type="checkbox" name="forreal" {$forReal} />
                     <label>do it for real?</label>
                 </div>
                 <hr />
                 <h4>See more info?</h4>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="debug" ${debug} />
+                    <input type="checkbox" name="debug" {$debug} />
                     <label>debug</label>
                 </div>
                 <hr />
