@@ -5,7 +5,6 @@ namespace Sunnysideup\DatabaseShareCleanUp;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
-
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
 use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
 use Sunnysideup\Flush\FlushNow;
@@ -13,20 +12,20 @@ use Sunnysideup\Flush\FlushNow;
 class CleanUp extends BuildTask
 {
     /**
-     * @var bool If set to FALSE, keep it from showing in the list
-     * and from being executable through URL or CLI.
+     * @var bool if set to FALSE, keep it from showing in the list
+     *           and from being executable through URL or CLI
      */
     protected $enabled = true;
 
     /**
      * @var string Shown in the overview on the {@link TaskRunner}
-     * HTML or CLI interface. Should be short and concise, no HTML allowed.
+     *             HTML or CLI interface. Should be short and concise, no HTML allowed.
      */
     protected $title = 'Cleanup and anonymise database - CAREFUL! Data will be deleted.';
 
     /**
      * @var string Describe the implications the task has,
-     * and the changes it makes. Accepts HTML formatting.
+     *             and the changes it makes. Accepts HTML formatting.
      */
     protected $description = 'Goes through database and deletes data that may expose personal information and bloat database.';
 
@@ -84,9 +83,10 @@ class CleanUp extends BuildTask
     private $database;
 
     /**
-     * Set a custom url segment (to follow dev/tasks/)
+     * Set a custom url segment (to follow dev/tasks/).
      *
      * @config
+     *
      * @var string
      */
     private static $segment = 'database-share-clean-up';
@@ -96,7 +96,7 @@ class CleanUp extends BuildTask
         $this->anonymiser = $a;
     }
 
-    public function setDatabase($b)
+    public function setDatabase(bool $b)
     {
         $this->database = $b;
     }
@@ -111,7 +111,7 @@ class CleanUp extends BuildTask
 
     /**
      * Implement this method in the task subclass to
-     * execute via the TaskRunner
+     * execute via the TaskRunner.
      *
      * @param HTTPRequest $request
      */
@@ -177,17 +177,20 @@ class CleanUp extends BuildTask
                 if ($this->debug) {
                     $this->data[$tableName]['Actions'][] = 'Skipped because it is in list of tables to keep.';
                 }
+
                 continue;
             }
             if ($this->database->isEmptyTable($tableName)) {
                 if ($this->debug) {
                     $this->data[$tableName]['Actions'][] = 'Skipped because table is empty.';
                 }
+
                 continue;
             }
             $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
             if ($this->selectedTables && ! in_array($tableName, $this->selectedTableList, true)) {
                 $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
+
                 continue;
             }
 
@@ -195,6 +198,7 @@ class CleanUp extends BuildTask
                 if (in_array($tableName, $tablesToDeleteForever, true)) {
                     $this->database->deleteTable($tableName);
                     $this->data[$tableName]['Actions'][] = 'DELETING FOREVER.';
+
                     continue;
                 }
                 $outcome = $this->database->deleteObsoleteTables($tableName);
@@ -220,16 +224,18 @@ class CleanUp extends BuildTask
             $fields = $this->database->getAllFieldsForOneTable($tableName);
 
             foreach ($fields as $fieldName) {
-                if (substr($fieldName, -2) === 'ID') {
+                if ('ID' === substr($fieldName, -2)) {
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping!';
                     }
+
                     continue;
                 }
                 if (in_array($fieldName, $fieldsToKeep, true)) {
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping!';
                     }
+
                     continue;
                 }
 
@@ -238,6 +244,7 @@ class CleanUp extends BuildTask
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping.';
                     }
+
                     continue;
                 }
                 if ($this->anonymise) {

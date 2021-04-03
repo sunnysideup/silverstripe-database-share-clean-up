@@ -35,7 +35,7 @@ class DatabaseActions
 
     public function emptyVersionedTable(string $tableName): bool
     {
-        if (substr($tableName, -9) === '_Versions') {
+        if ('_Versions' === substr($tableName, -9)) {
             $nonVersionedTable = substr($tableName, 0, strlen($tableName) - 9);
             if ($this->hasTable($nonVersionedTable)) {
                 $this->truncateTable($tableName);
@@ -55,19 +55,23 @@ class DatabaseActions
                 $sql = str_replace('"VERSION_NUMBER_HERE"', '1', $sql);
                 $this->debugFlush('Copying unversioned from ' . $nonVersionedTable . ' into ' . $tableName, 'info');
                 $this->executeSql($sql);
+
                 return true;
             }
             FlushNow::do_flush('ERROR: could not find: ' . $nonVersionedTable, 'bad');
         }
+
         return false;
     }
 
     public function deleteObsoleteTables(string $tableName): bool
     {
-        if (strpos($tableName, '_obsolete_') === 0) {
+        if (0 === strpos($tableName, '_obsolete_')) {
             $this->deleteTable($tableName);
+
             return true;
         }
+
         return false;
     }
 
@@ -88,7 +92,7 @@ class DatabaseActions
     public function truncateField(string $tableName, string $fieldName, ?int $limit = 99999999, ?bool $silent = false): bool
     {
         if ($this->isTextField($tableName, $fieldName)) {
-            if ($silent === false) {
+            if (false === $silent) {
                 $this->debugFlush('Emptying ' . $tableName . '.' . $fieldName, 'obsolete');
             }
             $sortStatement = $this->getSortStatement($tableName);
@@ -98,6 +102,7 @@ class DatabaseActions
                 ' . $sortStatement . '
                 LIMIT ' . $limit;
             $this->executeSql($sql);
+
             return true;
         }
         $this->debugFlush('Skipping emptying ' . $tableName . '.' . $fieldName . ' as this is not a text field', 'info');
@@ -116,6 +121,7 @@ class DatabaseActions
                 SET "' . $fieldName . '" = CONCAT(' . $r . ', ' . $r . ', ' . $r . ", '@', " . $r . ', ' . $r . ", '.', " . $r . ')
                 WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
             $this->executeSql($sql);
+
             return true;
         }
         $this->debugFlush('Skipping anonymising ' . $tableName . '.' . $fieldName . ' as this is not a text field', 'info');
@@ -139,14 +145,16 @@ class DatabaseActions
     {
         $this->debugFlush('Emptying ' . (100 - round($percentageToKeep * 100, 2)) . '% from ' . $tableName . '.' . $fieldName, 'obsolete');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
+
         return $this->truncateField($tableName, $fieldName, $limit, $silent = true);
     }
 
     public function getAllTables(?bool $fresh = true): array
     {
-        if ($fresh || count(self::$tableList) === 0) {
+        if ($fresh || 0 === count(self::$tableList)) {
             self::$tableList = DB::table_list();
         }
+
         return self::$tableList;
     }
 
@@ -163,12 +171,13 @@ class DatabaseActions
                 self::$fieldsForTable[$tableName] = DB::field_list($tableName);
             }
         }
+
         return self::$fieldsForTable[$tableName];
     }
 
     public function isEmptyTable(string $tableName): bool
     {
-        return $this->countRows($tableName) === 0;
+        return 0 === $this->countRows($tableName);
     }
 
     public function countRows(string $tableName): int
@@ -200,7 +209,7 @@ class DatabaseActions
         $details = $this->getAllFieldsForOneTableDetails($tableName);
         if (isset($details[$fieldName])) {
             foreach (self::TEXT_FIELDS as $test) {
-                if (stripos($details[$fieldName], $test) === 0) {
+                if (0 === stripos($details[$fieldName], $test)) {
                     return true;
                 }
             }
@@ -232,6 +241,7 @@ class DatabaseActions
         if ($this->hasField($tableName, 'ID')) {
             return 'ORDER BY "ID" ASC';
         }
+
         return '';
     }
 

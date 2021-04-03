@@ -56,7 +56,7 @@ class Anonymiser
      * specify tables with fields that are not to be deleted
      * e.g.
      *    MyTable.MyField,
-     *    MyTable2.MyField2,
+     *    MyTable2.MyField2,.
      *
      * @var array
      */
@@ -77,8 +77,10 @@ class Anonymiser
         $tables = $this->Config()->get('tables_to_remove');
         if (in_array($tableName, $tables, true)) {
             $this->databaseActions->truncateTable($tableName);
+
             return true;
         }
+
         return false;
     }
 
@@ -96,10 +98,11 @@ class Anonymiser
 
         $fieldsToDelete = $this->Config()->get('fields_to_anonymise');
         foreach ($fieldsToDelete as $fieldTest) {
-            if (strpos($fieldName, $fieldTest) !== false) {
+            if (false !== strpos($fieldName, $fieldTest)) {
                 return $this->databaseActions->anonymiseField($tableName, $fieldName);
             }
         }
+
         return false;
     }
 
