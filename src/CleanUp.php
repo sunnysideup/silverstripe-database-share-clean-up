@@ -91,14 +91,16 @@ class CleanUp extends BuildTask
      */
     private static $segment = 'database-share-clean-up';
 
-    public function setAnonymiser($a)
+    public function setAnonymiser($anonymiser)
     {
-        $this->anonymiser = $a;
+        $this->anonymiser = $anonymiser;
+        return $this;
     }
 
-    public function setDatabase(bool $b)
+    public function setDatabase($database)
     {
-        $this->database = $b;
+        $this->database = $database;
+        return $this;
     }
 
     /**
