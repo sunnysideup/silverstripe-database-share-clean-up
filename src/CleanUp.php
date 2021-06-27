@@ -94,12 +94,14 @@ class CleanUp extends BuildTask
     public function setAnonymiser($anonymiser)
     {
         $this->anonymiser = $anonymiser;
+
         return $this;
     }
 
     public function setDatabase($database)
     {
         $this->database = $database;
+
         return $this;
     }
 
