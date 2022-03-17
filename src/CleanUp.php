@@ -105,13 +105,6 @@ class CleanUp extends BuildTask
         return $this;
     }
 
-    /**
-     * @return bool
-     */
-    public function isEnabled()
-    {
-        return Director::isDev();
-    }
 
     /**
      * Implement this method in the task subclass to
