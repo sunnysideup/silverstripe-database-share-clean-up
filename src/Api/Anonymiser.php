@@ -21,7 +21,6 @@ class Anonymiser
      */
     private static $fields_to_anonymise = [
         'Email',
-        'Email',
         'Username',
         'City',
         'Suburb',

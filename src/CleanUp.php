@@ -230,7 +230,7 @@ class CleanUp extends BuildTask
                 }
                 if (in_array($fieldName, $fieldsToKeep, true)) {
                     if ($this->debug) {
-                        $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping!';
+                        $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping (field is marked as KEEP)!';
                     }
 
                     continue;
@@ -239,7 +239,7 @@ class CleanUp extends BuildTask
                 $combo = $tableName . '.' . $fieldName;
                 if (in_array($combo, $fieldTableCombosToKeep, true)) {
                     if ($this->debug) {
-                        $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping.';
+                        $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping (table.field is marked as KEEP).';
                     }
 
                     continue;
@@ -365,7 +365,7 @@ html;
         usort(
             $this->data,
             function ($a, $b) {
-                return $a['SizeAfter'] <=> $b['SizeAfter'];
+                return $b['SizeBefore'] <=> $a['SizeBefore'];
             }
         );
         foreach ($this->data as $data) {

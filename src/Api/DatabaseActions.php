@@ -209,7 +209,7 @@ class DatabaseActions
         $details = $this->getAllFieldsForOneTableDetails($tableName);
         if (isset($details[$fieldName])) {
             foreach (self::TEXT_FIELDS as $test) {
-                if (0 === stripos($details[$fieldName], $test)) {
+                if (0 === stripos(strtolower($details[$fieldName]), $test)) {
                     return true;
                 }
             }
@@ -218,7 +218,7 @@ class DatabaseActions
         }
     }
 
-    protected function turnPercentageIntoLimit(string $tableName, $percentageToKeep): int
+    protected function turnPercentageIntoLimit(string $tableName, float $percentageToKeep): int
     {
         $count = DB::query('SELECT COUNT(*) FROM "' . $tableName . '"')->value();
 
