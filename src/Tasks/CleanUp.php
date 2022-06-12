@@ -69,8 +69,9 @@ class CleanUp extends BuildTask
         $this->runner->setVar('removeRows', (bool) $request->getVar('removerows'));
         $this->runner->setVar('emptyFields', (bool) $request->getVar('emptyfields'));
         $this->runner->setVar('selectedTableList', ($request->getVar('selectedtablelist') ?: []));
-        $this->runner->setVar('selectedTablesOnly', (bool) $request->getVar('selectedTablesOnly'));
+        $this->runner->setVar('selectedTablesOnly', (bool) $request->getVar('selectedtablesonly'));
         $this->runner->setVar('beforeDate', (string) $request->getVar('beforedate'));
+        $this->runner->setVar('archiveRatherThanDelete', (string) $request->getVar('archiveratherthandelete'));
 
         if(! empty($request->getVar('selectedtablelist') )) {
             $this->runner->setVar('selectedTablesOnly', true);
@@ -90,15 +91,16 @@ class CleanUp extends BuildTask
 
     protected function createForm()
     {
-        $anonymise = $this->runner->get('anonymise') ? 'checked="checked"' : '';
-        $removeObsolete = $this->runner->get('removeObsolete') ? 'checked="checked"' : '';
-        $removeOldVersions = $this->runner->get('removeOldVersions') ? 'checked="checked"' : '';
-        $removeRows = $this->runner->get('removeRows') ? 'checked="checked"' : '';
-        $emptyFields = $this->runner->get('emptyFields') ? 'checked="checked"' : '';
-        $selectedTablesOnly = $this->runner->get('selectedTablesOnly') ? 'checked="checked"' : '';
-        $forReal = $this->runner->get('forReal') ? 'checked="checked"' : '';
-        $debug = $this->runner->get('debug') ? 'checked="checked"' : '';
-        $beforeDate = $this->runner->get('beforeDate') ? 'value="'.$this->runner->get('beforeDate').'"' : '';
+        $anonymise = $this->runner->getVar('anonymise') ? 'checked="checked"' : '';
+        $removeObsolete = $this->runner->getVar('removeObsolete') ? 'checked="checked"' : '';
+        $removeOldVersions = $this->runner->getVar('removeOldVersions') ? 'checked="checked"' : '';
+        $removeRows = $this->runner->getVar('removeRows') ? 'checked="checked"' : '';
+        $emptyFields = $this->runner->getVar('emptyFields') ? 'checked="checked"' : '';
+        $selectedTablesOnly = $this->runner->getVar('selectedtablesonly') ? 'checked="checked"' : '';
+        $forReal = $this->runner->getVar('forReal') ? 'checked="checked"' : '';
+        $debug = $this->runner->getVar('debug') ? 'checked="checked"' : '';
+        $beforeDate = $this->runner->getVar('beforeDate') ? 'value="'.$this->runner->getVar('beforeDate').'"' : '';
+        $archiveRatherThanDelete = $this->runner->getVar('archiveratherthandelete') ? 'checked="checked"' : '';
         echo <<<html
         <h3>All sizes in Megabytes</h3>
         <form method="get">
@@ -143,8 +145,12 @@ class CleanUp extends BuildTask
                 <hr />
                 <h4>How to apply?</h4>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="selectedTablesOnly" {$selectedTablesOnly} />
+                    <input type="checkbox" name="selectedtablesonly" {$selectedTablesOnly} />
                     <label>apply to selected tables only?</label>
+                </div>
+                <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="archiveRatherThanDelete" {$archiveRatherThanDelete} />
+                    <label>archive rather than delete</label>
                 </div>
                 <div class="field" style="padding: 10px;">
                     <input type="checkbox" name="forreal" {$forReal} />

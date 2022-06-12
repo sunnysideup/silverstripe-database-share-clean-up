@@ -68,6 +68,8 @@ class DatabaseCleanupRunner
 
     protected $beforeDate = '';
 
+    protected $archiveRatherThanDelete = false;
+
     /**
      * configs from statics
      * @var [type]
@@ -84,13 +86,13 @@ class DatabaseCleanupRunner
         $tableFieldCombosToBeCleaned
     ;
 
-    public function setVar($name, $value)
+    public function setVar(string $name, $value)
     {
         $this->$name = $value;
         return $this;
     }
 
-    public function getVar($name)
+    public function getVar(string $name)
     {
         return $this->$name;
     }
@@ -180,6 +182,7 @@ class DatabaseCleanupRunner
 
                 continue;
             }
+
             // get size
             $this->data[$tableName]['SizeBefore'] = $this->databaseActions->getTableSizeInMegaBytes($tableName);
 
@@ -299,18 +302,18 @@ class DatabaseCleanupRunner
 
         // clean table
         if ($this->beforeDate) {
-            $this->databaseActionsOlderRows->deleteBeforeDate($tableName, $this->beforeDate);
+            $this->databaseActionsOlderRows->deleteBeforeDate($tableName, $this->beforeDate, $this->archiveRatherThanDelete);
         }
         elseif ($this->removeRows) {
             $removeAllRows = in_array($tableName, $this->tablesToBeCleaned, true);
             if ($removeAllRows) {
-                $this->databaseActionsOlderRows->removeOldRowsFromTable($tableName, 0.01);
+                $this->databaseActionsOlderRows->removeOldRowsFromTable($tableName, 0.01, $this->archiveRatherThanDelete);
                 $this->data[$tableName]['Actions'][] = 'Removed most rows.';
             } else {
                 $tableSize = $this->databaseActions->getTableSizeInMegaBytes($tableName);
                 if ($tableSize > $this->maxTableSize) {
                     $percentageToKeep = $this->maxTableSize / $tableSize;
-                    $this->databaseActionsOlderRows->removeOldRowsFromTable($tableName, $percentageToKeep);
+                    $this->databaseActionsOlderRows->removeOldRowsFromTable($tableName, $percentageToKeep, $this->archiveRatherThanDelete);
                     $this->data[$tableName]['Actions'][] = 'Removed old rows.';
                 }
             }
