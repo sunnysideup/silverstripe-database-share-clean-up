@@ -11,7 +11,7 @@ class DeleteOlderRows extends DatabaseActions
 {
 
 
-    public function deleteBeforeDate(string $classNameOrTableName, ?string $dateAgoString = '-10 years')
+    public function deleteBeforeDate(string $classNameOrTableName, ?string $dateAgoString = '-10 years') : bool
     {
         $className = $this->getClassNameFromTableName($$classNameOrTableName);
         $results = [
@@ -43,12 +43,10 @@ class DeleteOlderRows extends DatabaseActions
             DB::query($sql);
             $this->debugFlush("... ".DB::get_conn()->affectedRows()." rows removed", 'deleted');
         }
-        $results['After'] = DB::query('
-            SELECT COUNT("ID") FROM "'.$mainTable.'"
-        ')->value();
+        return true;
     }
 
-    public function removeOldRowsFromTable(string $tableName, float $percentageToKeep)
+    public function removeOldRowsFromTable(string $tableName, float $percentageToKeep) : bool
     {
         $this->debugFlush('Deleting ' . (100 - round($percentageToKeep * 100, 2)) . '% of the Rows in ' . $tableName, 'obsolete');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
@@ -58,6 +56,7 @@ class DeleteOlderRows extends DatabaseActions
             ' . $sortStatement . '
             LIMIT ' . $limit;
         $this->executeSql($sql);
+        return true;
     }
 
     public function removeOldColumnsFromTable(string $tableName, string $fieldName, float $percentageToKeep): bool

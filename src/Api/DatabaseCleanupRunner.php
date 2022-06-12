@@ -80,7 +80,7 @@ class DatabaseCleanupRunner
         $fieldsToKeep,
         $fieldTableCombosToKeep,
         $tablesToBeCleaned,
-        $fieldsToBeCleaned ,
+        $fieldsToBeCleaned,
         $tableFieldCombosToBeCleaned
     ;
 
@@ -150,7 +150,7 @@ class DatabaseCleanupRunner
         return $this;
     }
 
-    protected function runInner() : array
+    public function runForAllTables() : array
     {
         $this->setVars();
 
@@ -203,7 +203,7 @@ class DatabaseCleanupRunner
             // remove sobsolete tables
             if ($this->removeObsolete) {
 
-                $outcome = $this->databaseActions->databaseActionsVersionedTables($tableName);
+                $outcome = $this->databaseActions->deleteObsoleteTables($tableName);
                 if ($outcome) {
                     $this->data[$tableName]['Actions'][] = 'Deleted because it is obsolete.';
                 }
@@ -227,7 +227,7 @@ class DatabaseCleanupRunner
     {
         // remove old vresions
         if ($this->removeOldVersions) {
-            $outcome = $this->databaseActions->emptyVersionedTable($tableName);
+            $outcome = $this->databaseActionsVersionedTables->emptyVersionedTable($tableName);
             if ($outcome) {
                 $this->data[$tableName]['Actions'][] = 'Remove all and replace with one entry for each record.';
             }

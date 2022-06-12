@@ -84,7 +84,7 @@ class CleanUp extends BuildTask
         }
 
         $this->createForm();
-        $this->data = $this->runner->run();
+        $this->data = $this->runner->runForAllTables();
         $this->createTable();
     }
 
