@@ -15,12 +15,56 @@ use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
 
-class DatabaseCleanupRunner extends DatabaseCleanupConfig
+class DatabaseCleanupConfig
 {
+    use Injectable;
+    use Configurable;
+    use Extensible;
 
-    protected function runInner() : array
+    private static $tables_to_delete_forever = [];
+
+    private static $tables_to_be_cleaned = [
+        'LoginAttempt',
+    ];
+
+    private static $fields_to_be_cleaned = [];
+
+    private static $field_table_comboes_to_be_cleaned = [];
+
+    private static $tables_to_keep = [];
+
+    private static $fields_to_keep = [
+        'ClassName',
+        'Created',
+        'LastEdited',
+    ];
+
+    private static $field_table_combos_to_keep = [];
+
+    private static $max_table_size_in_mb = 20;
+
+    private static $max_column_size_in_mb = 2;
+
+    protected $forReal = false;
+
+    protected $anonymise = false;
+
+    protected $removeObsolete = false;
+
+    protected $removeOldVersions = false;
+
+    protected $debug = false;
+
+    protected $emptyFields = false;
+
+    protected $removeRows = false;
+
+    protected $selectedTables = false;
+
+    protected $selectedTableList = [];
+
+    public function configinit()
     {
-
         $this->databaseActions->setForReal($this->runner->set('forReal);
         $this->databaseActions->setDebug($this->runner->set('debug);
 
@@ -36,6 +80,12 @@ class DatabaseCleanupRunner extends DatabaseCleanupConfig
         $tablesToBeCleaned = $this->Config()->get('tables_to_be_cleaned');
         $fieldsToBeCleaned = $this->Config()->get('fields_to_be_cleaned');
         $tableFieldCombosToBeCleaned = $this->Config()->get('field_table_comboes_to_be_cleaned');
+    }
+
+    protected function runInner() : array
+    {
+
+
 
         $tables = $this->databaseActions->getAllTables();
         foreach ($tables as $tableName) {

@@ -18,6 +18,17 @@ use Sunnysideup\Flush\FlushNow;
 
 class CleanUp extends BuildTask
 {
+
+
+    /**
+     * Set a custom url segment (to follow dev/tasks/).
+     *
+     * @config
+     *
+     * @var string
+     */
+    private static $segment = 'database-share-clean-up';
+
     /**
      * @var bool if set to FALSE, keep it from showing in the list
      *           and from being executable through URL or CLI
@@ -57,10 +68,7 @@ class CleanUp extends BuildTask
         if ($request->getVar('forreal')) {
             $this->runner->setVar('debug = true;
         }
-        $this->runner->set('selectedTableList = $request->getVar('selectedtablelist') ?? [];
-
-        $this->runner->set('databaseActions->setForReal($this->runner->set('forReal);
-        $this->runner->set('databaseActions->setDebug($this->runner->set('debug);
+        $this->runner->setVar('selectedTableList = $request->getVar('selectedtablelist') ?? [];
 
         if ($this->runner->set('forReal) {
             FlushNow::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
