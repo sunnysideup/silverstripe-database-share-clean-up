@@ -8,6 +8,7 @@ use Sunnysideup\Flush\FlushNow;
 
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
+use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Injector\Injectable;
 
 class DatabaseInfo
@@ -28,6 +29,23 @@ class DatabaseInfo
     protected static $tableList = [];
 
     protected static $fieldsForTable = [];
+
+    public function getClassNameFromTableName(string $tableName) : string
+    {
+        if(class_exists($tableName)) {
+            if( Injector::inst()->get($tableName) instanceof DataObject) {
+                return $tableName;
+            }
+        }
+        $subClasses = ClassInfo::subclassesFor(DataObject::class, false);
+        foreach($subClasses as $className) {
+            $test = $this->getTableForClassName($className);
+            if($tableName === $test) {
+                return $className;
+            }
+        }
+        return '';
+    }
 
     public function getTableForClassName(string $className) : string
     {
@@ -124,6 +142,16 @@ class DatabaseInfo
         $count = DB::query('SELECT COUNT(*) FROM "' . $tableName . '"')->value();
 
         return (int) round($percentageToKeep * $count);
+    }
+
+    protected function hasField(string $tableName, string $fieldName): bool
+    {
+        return (bool) DB::get_schema()->hasField($tableName, $fieldName);
+    }
+
+    protected function hasTable(string $tableName): bool
+    {
+        return (bool) DB::get_schema()->hasTable($tableName);
     }
 
 }

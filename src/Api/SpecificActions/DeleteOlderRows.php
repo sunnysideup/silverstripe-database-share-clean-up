@@ -11,19 +11,20 @@ class DeleteOlderRows extends DatabaseActions
 {
 
 
-    public function deleteBeforeDate(string $className, ?string $dateAgoString = '-10 years') {
+    public function deleteBeforeDate(string $classNameOrTableName, ?string $dateAgoString = '-10 years')
+    {
+        $className = $this->getClassNameFromTableName($$classNameOrTableName);
         $results = [
             'Before' => 0,
             'After' => 0,
             'Notes' => [],
         ];
         $mainTable = $this->getTableForClassName($className);
-        $results['Before'] = DB::query('SELECT COUNT(ID) FROM "'.$mainTable.'"')->value();
         $classTables = [$mainTable];
         $ago = date('Y-m-d h:i:s', $dateAgoString);
         $results['Notes'][] = "Looking for all records that are older than {$ago}";
         foreach ($this->getSubTables($className) as $tableName) {
-            $results['Notes'][] = "... DELETING OLD ENTRIES FROM {$tableName}";
+            $this->debugFlush("... DELETING OLD ENTRIES FROM {$tableName}", 'deleted');
             if($tableName === $mainTable) {
                 $where = " \"LastEdited\" < '{$ago}'";
                 $sql = "
@@ -33,14 +34,14 @@ class DeleteOlderRows extends DatabaseActions
                 $sql = '
                     DELETE "'.$tableName.'".*
                     FROM "'.$tableName.'"
-                        LEFT JOIN "'.$tableName.'"
+                        RIGHT JOIN "'.$mainTable.'"
                             ON "'.$tableName.'"."ID" = "'.$mainTable.'"."ID"
                     WHERE "'.$mainTable.'"."ID" IS NULL;
 
                 ';
             }
             DB::query($sql);
-            $results['Notes'][] = "... ".DB::get_conn()->affectedRows()." rows removed";
+            $this->debugFlush("... ".DB::get_conn()->affectedRows()." rows removed", 'deleted');
         }
         $results['After'] = DB::query('
             SELECT COUNT("ID") FROM "'.$mainTable.'"

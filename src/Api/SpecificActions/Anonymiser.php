@@ -104,7 +104,7 @@ class Anonymiser extends DatabaseActions
         }
     }
 
-    public function anonymiseField(string $tableName, string $fieldName): bool
+    protected function anonymiseField(string $tableName, string $fieldName): bool
     {
         if ($this->isTextField($tableName, $fieldName)) {
             $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');

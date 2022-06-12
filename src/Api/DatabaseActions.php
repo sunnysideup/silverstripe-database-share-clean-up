@@ -13,47 +13,24 @@ class DatabaseActions extends DatabaseInfo
 
     protected static $debug = false;
 
+    protected static $runner = null;
+
 
     public function setForReal(bool $bool)
     {
-        $this->forReal = $bool;
+        self::$forReal = $bool;
     }
 
     public function setDebug(bool $bool)
     {
-        $this->debug = $bool;
+        self::$debug = $bool;
     }
 
-    public function emptyVersionedTable(string $tableName): bool
+    public function setRunner($runner)
     {
-        if ('_Versions' === substr($tableName, -9)) {
-            $nonVersionedTable = substr($tableName, 0, strlen($tableName) - 9);
-            if ($this->hasTable($nonVersionedTable)) {
-                $this->truncateTable($tableName);
-                $fields = $this->getAllFieldsForOneTable($nonVersionedTable);
-                $fields = array_combine($fields, $fields);
-                foreach ($fields as $fieldName) {
-                    if (! ($this->hasField($tableName, $fieldName) && $this->hasField($nonVersionedTable, $fieldName))) {
-                        unset($fields[$fieldName]);
-                    }
-                }
-                $fields['ID'] = 'RecordID';
-                unset($fields['Version']);
-                $fields['VERSION_NUMBER_HERE'] = 'Version';
-                $sql = '
-                    INSERT INTO "' . $tableName . '" ("' . implode('", "', $fields) . '")
-                    SELECT "' . implode('", "', array_keys($fields)) . '" FROM "' . $nonVersionedTable . '";';
-                $sql = str_replace('"VERSION_NUMBER_HERE"', '1', $sql);
-                $this->debugFlush('Copying unversioned from ' . $nonVersionedTable . ' into ' . $tableName, 'info');
-                $this->executeSql($sql);
-
-                return true;
-            }
-            FlushNow::do_flush('ERROR: could not find: ' . $nonVersionedTable, 'bad');
-        }
-
-        return false;
+        self::$runner = $runner;
     }
+
 
     public function deleteObsoleteTables(string $tableName): bool
     {
@@ -104,7 +81,7 @@ class DatabaseActions extends DatabaseInfo
     protected function executeSql(string $sql)
     {
         $this->debugFlush('Running <pre>' . $sql . '</pre>', 'info');
-        if ($this->forReal) {
+        if (self::$forReal) {
             DB::query($sql);
             $this->debugFlush(' ... done', 'green');
         } else {
@@ -126,19 +103,9 @@ class DatabaseActions extends DatabaseInfo
         return '';
     }
 
-    protected function hasField(string $tableName, string $fieldName): bool
-    {
-        return (bool) DB::get_schema()->hasField($tableName, $fieldName);
-    }
-
-    protected function hasTable(string $tableName): bool
-    {
-        return (bool) DB::get_schema()->hasTable($tableName);
-    }
-
     protected function debugFlush(string $message, string $type)
     {
-        if ($this->debug) {
+        if (self::$debug) {
             FlushNow::do_flush($message, $type);
         }
     }

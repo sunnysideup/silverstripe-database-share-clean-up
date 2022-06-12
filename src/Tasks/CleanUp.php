@@ -19,6 +19,9 @@ use Sunnysideup\Flush\FlushNow;
 class CleanUp extends BuildTask
 {
 
+    protected $data = [];
+
+    protected $runner = null;
 
     /**
      * Set a custom url segment (to follow dev/tasks/).
@@ -56,44 +59,42 @@ class CleanUp extends BuildTask
     public function run($request)
     {
         $this->runner = Injector::inst()->get(DatabaseCleanupRunner::class);
+
+        $this->runner->setVar('debug', (bool) $request->getVar('debug'));
+        $this->runner->setVar('forReal', (bool) $request->getVar('forreal'));
+
         $this->runner->setVar('anonymise', (bool) $request->getVar('anonymise'));
-        $this->runner->setVar('removeObsolete = (bool) $request->getVar('removeobsolete');
-        $this->runner->setVar('removeOldVersions = (bool) $request->getVar('removeoldversions');
-        $this->runner->setVar('removeRows = (bool) $request->getVar('removerows');
-        $this->runner->setVar('emptyFields = (bool) $request->getVar('emptyfields');
+        $this->runner->setVar('removeObsolete', (bool) $request->getVar('removeobsolete'));
+        $this->runner->setVar('removeOldVersions', (bool) $request->getVar('removeoldversions'));
+        $this->runner->setVar('removeRows', (bool) $request->getVar('removerows'));
+        $this->runner->setVar('emptyFields', (bool) $request->getVar('emptyfields'));
+        $this->runner->setVar('selectedTableList', ($request->getVar('selectedtablelist') ?: []));
+        $this->runner->setVar('selectedTables', (bool) $request->getVar('selectedtables'));
+        $this->runner->setVar('beforeDate', (string) $request->getVar('beforedate'));
 
-        $this->runner->setVar('selectedTables = (bool) $request->getVar('selectedtables');
-        $this->runner->setVar('debug = (bool) $request->getVar('debug');
-        $this->runner->setVar('forReal = (bool) $request->getVar('forreal');
         if ($request->getVar('forreal')) {
-            $this->runner->setVar('debug = true;
-        }
-        $this->runner->setVar('selectedTableList = $request->getVar('selectedtablelist') ?? [];
-
-        if ($this->runner->set('forReal) {
+            $this->runner->setVar('debug', true);
             FlushNow::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
         } else {
             FlushNow::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
         }
-        if ($this->runner->set('anonymise) {
-            $this->runner->set('databaseActionsAnonymiser->AnonymisePresets();
-        }
 
-        $this->runner->set('createForm();
-        $this->runner->set('runInner();
-        $this->runner->set('createTable();
+        $this->createForm();
+        $this->data = $this->runner->run();
+        $this->createTable();
     }
 
     protected function createForm()
     {
-        $anonymise = $this->runner->set('anonymise ? 'checked="checked"' : '';
-        $removeObsolete = $this->runner->set('removeObsolete ? 'checked="checked"' : '';
-        $removeOldVersions = $this->runner->set('removeOldVersions ? 'checked="checked"' : '';
-        $removeRows = $this->runner->set('removeRows ? 'checked="checked"' : '';
-        $emptyFields = $this->runner->set('emptyFields ? 'checked="checked"' : '';
-        $selectedTables = $this->runner->set('selectedTables ? 'checked="checked"' : '';
-        $forReal = $this->runner->set('forReal ? 'checked="checked"' : '';
-        $debug = $this->runner->set('debug ? 'checked="checked"' : '';
+        $anonymise = $this->runner->get('anonymise') ? 'checked="checked"' : '';
+        $removeObsolete = $this->runner->get('removeObsolete') ? 'checked="checked"' : '';
+        $removeOldVersions = $this->runner->get('removeOldVersions') ? 'checked="checked"' : '';
+        $removeRows = $this->runner->get('removeRows') ? 'checked="checked"' : '';
+        $emptyFields = $this->runner->get('emptyFields') ? 'checked="checked"' : '';
+        $selectedTables = $this->runner->get('selectedTables') ? 'checked="checked"' : '';
+        $forReal = $this->runner->get('forReal') ? 'checked="checked"' : '';
+        $debug = $this->runner->get('debug') ? 'checked="checked"' : '';
+        $beforeDate = $this->runner->get('beforeDate') ? 'value="'.$this->runner->get('beforeDate').'"' : '';
         echo <<<html
         <h3>All sizes in Megabytes</h3>
         <form method="get">
@@ -130,6 +131,10 @@ class CleanUp extends BuildTask
                     <input type="checkbox" name="removerows" {$removeRows} />
                     <label>remove old rows if there are too many (not recommended)</label>
                 </div>
+                <div class="field" style="padding: 10px;">
+                    <input type="text" name="beforeDate" {$beforeDate} /><br />
+                    <label>remove old rows before a date</label>
+                </div>
 
                 <hr />
                 <h4>How to apply?</h4>
@@ -142,11 +147,13 @@ class CleanUp extends BuildTask
                     <label>do it for real?</label>
                 </div>
                 <hr />
+
                 <h4>See more info?</h4>
                 <div class="field" style="padding: 10px;">
                     <input type="checkbox" name="debug" {$debug} />
                     <label>debug</label>
                 </div>
+
                 <hr />
                 <div class="field" style="padding: 10px;">
                     <input type="submit" value="let's do it!" />
@@ -163,38 +170,39 @@ html;
         $totalSizeBefore = 0;
         $totalSizeAfter = 0;
         usort(
-            $this->runner->set('data,
+            $this->data,
             function ($a, $b) {
                 return $b['SizeBefore'] <=> $a['SizeBefore'];
             }
         );
-        foreach ($this->runner->set('data as $data) {
-            $totalSizeBefore += $data['SizeBefore'];
-            $totalSizeAfter += $data['SizeAfter'];
+        foreach ($this->data as $row) {
+            $totalSizeBefore += $row['SizeBefore'];
+            $totalSizeAfter += $row['SizeAfter'];
             $actions = '';
-            if (count($data['Actions'])) {
+            if (count($row['Actions'])) {
                 $actions = '
                         <ul>
                             <li>
-                            ' . implode('</li><li>', $data['Actions']) . '
+                            ' . implode('</li><li>', $row['Actions']) . '
                             </li>
                         </ul>';
             }
-            $tableList = empty($this->runner->set('selectedTableList[$data['TableName']]) ? '' : 'checked="checked"';
+            $selectedTables = $this->runner->get('selectedTableList');
+            $tableList = empty($selectedTables['TableName']) ? '' : 'checked="checked"';
             $tbody .= '
                 <tr>
                     <td>
-                        <input type="checkbox" name="selectedtablelist[]" value="' . $data['TableName'] . '" ' . $tableList . ' />
+                        <input type="checkbox" name="selectedtablelist[]" value="' . $row['TableName'] . '" ' . $tableList . ' />
                     </td>
                     <td>
-                        ' . $data['TableName'] . '
+                        ' . $row['TableName'] . '
                         ' . $actions . '
                     </td>
                     <td style="text-align: center;">
-                        ' . $data['SizeBefore'] . '
+                        ' . $row['SizeBefore'] . '
                     </td>
                     <td style="text-align: center;">
-                        ' . $data['SizeAfter'] . '
+                        ' . $row['SizeAfter'] . '
                     </td>
                 </tr>';
         }
