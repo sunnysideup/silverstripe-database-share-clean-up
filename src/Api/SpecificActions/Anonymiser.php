@@ -1,20 +1,15 @@
 <?php
 
-namespace Sunnysideup\DatabaseShareCleanUp\Api;
+namespace Sunnysideup\DatabaseShareCleanUp\Api\SpecificActions;
 
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
 
-class Anonymiser
+use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
+
+class Anonymiser extends DatabaseActions
 {
-    use Injectable;
-    use Configurable;
-    use Extensible;
-
-    public $databaseActions;
-
-    protected $databaseAction;
 
     /**
      * @var array
@@ -66,16 +61,11 @@ class Anonymiser
      */
     private static $also_remove_table_field_combos = [];
 
-    public function setDatabaseActions($databaseActions)
-    {
-        $this->databaseActions = $databaseActions;
-    }
-
     public function AnonymiseTable(string $tableName): bool
     {
         $tables = $this->Config()->get('tables_to_remove');
         if (in_array($tableName, $tables, true)) {
-            $this->databaseActions->truncateTable($tableName);
+            $this->truncateTable($tableName);
 
             return true;
         }
@@ -98,7 +88,7 @@ class Anonymiser
         $fieldsToDelete = $this->Config()->get('fields_to_anonymise');
         foreach ($fieldsToDelete as $fieldTest) {
             if (false !== strpos($fieldName, $fieldTest)) {
-                return $this->databaseActions->anonymiseField($tableName, $fieldName);
+                return $this->anonymiseField($tableName, $fieldName);
             }
         }
 
@@ -110,8 +100,27 @@ class Anonymiser
         $also = $this->Config()->get('also_remove_table_field_combos');
         foreach ($also as $combo) {
             list($tableName, $fieldName) = explode('.', $combo);
-            $this->databaseActions->anonymiseField($tableName, $fieldName);
+            $this->anonymiseField($tableName, $fieldName);
         }
+    }
+
+    public function anonymiseField(string $tableName, string $fieldName): bool
+    {
+        if ($this->isTextField($tableName, $fieldName)) {
+            $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
+            // $sortStatement = $this->getSortStatement($tableName);
+            $r = "SUBSTR('0123456789abcdefghihjlmnopqrstuvwxyz',(RAND()*35)+1,1)";
+            $sql = '
+                UPDATE "' . $tableName . '"
+                SET "' . $fieldName . '" = CONCAT(' . $r . ', ' . $r . ', ' . $r . ", '@', " . $r . ', ' . $r . ", '.', " . $r . ')
+                WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+            $this->executeSql($sql);
+
+            return true;
+        }
+        $this->debugFlush('Skipping anonymising ' . $tableName . '.' . $fieldName . ' as this is not a text field', 'info');
+
+        return false;
     }
 
     // look for any field called Email / Phone / Address / FirstName /
