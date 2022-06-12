@@ -30,43 +30,6 @@ class DatabaseInfo
 
     protected static $fieldsForTable = [];
 
-    public function getClassNameFromTableName(string $tableName) : string
-    {
-        if(class_exists($tableName)) {
-            if( Injector::inst()->get($tableName) instanceof DataObject) {
-                return $tableName;
-            }
-        }
-        $subClasses = ClassInfo::subclassesFor(DataObject::class, false);
-        foreach($subClasses as $className) {
-            $test = $this->getTableForClassName($className);
-            if($tableName === $test) {
-                return $className;
-            }
-        }
-        return '';
-    }
-
-    public function getTableForClassName(string $className) : string
-    {
-        return DataObject::getSchema()->tableName($className);
-    }
-
-    public function getSubTables(string $className) : array
-    {
-        $classTables = [];
-        $subClasses = ClassInfo::subclassesFor($className, false);
-        foreach ($subClasses as $class) {
-            if (DataObject::getSchema()->classHasTable($class)) {
-                $classTables[] = DataObject::getSchema()->tableName($class);
-            }
-        }
-        $classTables = array_unique($classTables);
-
-        return $classTables;
-    }
-
-
     public function getAllTables(?bool $fresh = true): array
     {
         if ($fresh || 0 === count(self::$tableList)) {
@@ -137,6 +100,43 @@ class DatabaseInfo
         }
     }
 
+    public function getClassNameFromTableName(string $tableName) : string
+    {
+        if(class_exists($tableName)) {
+            if( Injector::inst()->get($tableName) instanceof DataObject) {
+                return $tableName;
+            }
+        }
+        $subClasses = ClassInfo::subclassesFor(DataObject::class, false);
+        foreach($subClasses as $className) {
+            $test = $this->getTableForClassName($className);
+            if($tableName === $test) {
+                return $className;
+            }
+        }
+        return '';
+    }
+
+    public function getTableForClassName(string $className) : string
+    {
+        return DataObject::getSchema()->tableName($className);
+    }
+
+    public function getSubTables(string $className) : array
+    {
+        $classTables = [];
+        $subClasses = ClassInfo::subclassesFor($className, false);
+        foreach ($subClasses as $class) {
+            if (DataObject::getSchema()->classHasTable($class)) {
+                $classTables[] = DataObject::getSchema()->tableName($class);
+            }
+        }
+        $classTables = array_unique($classTables);
+
+        return $classTables;
+    }
+
+
     protected function turnPercentageIntoLimit(string $tableName, float $percentageToKeep): int
     {
         $count = DB::query('SELECT COUNT(*) FROM "' . $tableName . '"')->value();
@@ -153,5 +153,7 @@ class DatabaseInfo
     {
         return (bool) DB::get_schema()->hasTable($tableName);
     }
+
+
 
 }

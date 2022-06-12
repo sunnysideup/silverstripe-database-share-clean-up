@@ -50,19 +50,19 @@ class DatabaseCleanupRunner
 
     protected $forReal = false;
 
+    protected $debug = false;
+
     protected $anonymise = false;
 
     protected $removeObsolete = false;
 
     protected $removeOldVersions = false;
 
-    protected $debug = false;
-
     protected $emptyFields = false;
 
     protected $removeRows = false;
 
-    protected $selectedTables = false;
+    protected $selectedTablesOnly = false;
 
     protected $selectedTableList = [];
 
@@ -184,7 +184,7 @@ class DatabaseCleanupRunner
             $this->data[$tableName]['SizeBefore'] = $this->databaseActions->getTableSizeInMegaBytes($tableName);
 
             // skip not selected ones
-            if (!empty($this->selectedTables) && ! in_array($tableName, $this->selectedTableList, true)) {
+            if ($this->selectedTablesOnly && ! in_array($tableName, $this->selectedTableList, true)) {
                 $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
 
                 continue;
@@ -192,8 +192,10 @@ class DatabaseCleanupRunner
 
             // delete tables to delete forever
             if (in_array($tableName, $this->tablesToDeleteForever, true)) {
-                $this->databaseActions->deleteTable($tableName);
-                $this->data[$tableName]['Actions'][] = 'DELETING FOREVER.';
+                $outcome = $this->databaseActions->deleteTable($tableName);
+                if ($outcome) {
+                    $this->data[$tableName]['Actions'][] = 'DELETING FOREVER.';
+                }
 
                 continue;
             }
@@ -205,23 +207,11 @@ class DatabaseCleanupRunner
                 if ($outcome) {
                     $this->data[$tableName]['Actions'][] = 'Deleted because it is obsolete.';
                 }
+
+                continue;
             }
 
-            // remove old vresions
-            if ($this->removeOldVersions) {
-                $outcome = $this->databaseActions->emptyVersionedTable($tableName);
-                if ($outcome) {
-                    $this->data[$tableName]['Actions'][] = 'Remove all and replace with one entry for each record.';
-                }
-            }
-
-            // anonimise
-            if ($this->anonymise) {
-                $outcome = $this->databaseActionsAnonymiser->AnonymiseTable($tableName);
-                if ($outcome) {
-                    $this->data[$tableName]['Actions'][] = 'Anonymised Table.';
-                }
-            }
+            $this->tableMutations($tableName);
 
             $this->runFields($tableName);
 
@@ -232,6 +222,25 @@ class DatabaseCleanupRunner
         return $this->data;
     }
 
+
+    protected function tableMutations(string $tableName)
+    {
+        // remove old vresions
+        if ($this->removeOldVersions) {
+            $outcome = $this->databaseActions->emptyVersionedTable($tableName);
+            if ($outcome) {
+                $this->data[$tableName]['Actions'][] = 'Remove all and replace with one entry for each record.';
+            }
+        }
+
+        // anonimise
+        if ($this->anonymise) {
+            $outcome = $this->databaseActionsAnonymiser->AnonymiseTable($tableName);
+            if ($outcome) {
+                $this->data[$tableName]['Actions'][] = 'Anonymised Table.';
+            }
+        }
+    }
 
     protected function runFields(string $tableName)
     {
@@ -276,7 +285,7 @@ class DatabaseCleanupRunner
                 $test3 = in_array($combo, $this->tableFieldCombosToBeCleaned, true);
                 if ($test1 || $test2 || $test3) {
                     $percentageToKeep = $test2 || $test3 ? 0 : $this->maxColumnSize / $columnSize;
-                    $outcome = $this->databaseActions->removeOldColumnsFromTable($tableName, $fieldName, $percentageToKeep);
+                    $outcome = $this->databaseActionsOlderRows->removeOldColumnsFromTable($tableName, $fieldName, $percentageToKeep);
                     if ($outcome) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': Removed most rows.';
                     }

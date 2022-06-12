@@ -69,8 +69,12 @@ class CleanUp extends BuildTask
         $this->runner->setVar('removeRows', (bool) $request->getVar('removerows'));
         $this->runner->setVar('emptyFields', (bool) $request->getVar('emptyfields'));
         $this->runner->setVar('selectedTableList', ($request->getVar('selectedtablelist') ?: []));
-        $this->runner->setVar('selectedTables', (bool) $request->getVar('selectedtables'));
+        $this->runner->setVar('selectedTablesOnly', (bool) $request->getVar('selectedTablesOnly'));
         $this->runner->setVar('beforeDate', (string) $request->getVar('beforedate'));
+
+        if(! empty($request->getVar('selectedtablelist') )) {
+            $this->runner->setVar('selectedTablesOnly', true);
+        }
 
         if ($request->getVar('forreal')) {
             $this->runner->setVar('debug', true);
@@ -91,7 +95,7 @@ class CleanUp extends BuildTask
         $removeOldVersions = $this->runner->get('removeOldVersions') ? 'checked="checked"' : '';
         $removeRows = $this->runner->get('removeRows') ? 'checked="checked"' : '';
         $emptyFields = $this->runner->get('emptyFields') ? 'checked="checked"' : '';
-        $selectedTables = $this->runner->get('selectedTables') ? 'checked="checked"' : '';
+        $selectedTablesOnly = $this->runner->get('selectedTablesOnly') ? 'checked="checked"' : '';
         $forReal = $this->runner->get('forReal') ? 'checked="checked"' : '';
         $debug = $this->runner->get('debug') ? 'checked="checked"' : '';
         $beforeDate = $this->runner->get('beforeDate') ? 'value="'.$this->runner->get('beforeDate').'"' : '';
@@ -139,7 +143,7 @@ class CleanUp extends BuildTask
                 <hr />
                 <h4>How to apply?</h4>
                 <div class="field" style="padding: 10px;">
-                    <input type="checkbox" name="selectedtables" {$selectedTables} />
+                    <input type="checkbox" name="selectedTablesOnly" {$selectedTablesOnly} />
                     <label>apply to selected tables only?</label>
                 </div>
                 <div class="field" style="padding: 10px;">
@@ -187,8 +191,8 @@ html;
                             </li>
                         </ul>';
             }
-            $selectedTables = $this->runner->get('selectedTableList');
-            $tableList = empty($selectedTables['TableName']) ? '' : 'checked="checked"';
+            $selectedTablesOnly = $this->runner->get('selectedTableList');
+            $tableList = empty($selectedTablesOnly['TableName']) ? '' : 'checked="checked"';
             $tbody .= '
                 <tr>
                     <td>
