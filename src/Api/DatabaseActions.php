@@ -12,7 +12,15 @@ class DatabaseActions
      */
     protected const TEXT_FIELDS = [
         'varchar',
+        'text',
         'mediumtext',
+    ];
+
+    /**
+     * @var string[]
+     */
+    protected const DATE_FIELDS = [
+        'date',
     ];
 
     protected $forReal = false;
@@ -91,7 +99,7 @@ class DatabaseActions
 
     public function truncateField(string $tableName, string $fieldName, ?int $limit = 99999999, ?bool $silent = false): bool
     {
-        if ($this->isTextField($tableName, $fieldName)) {
+        if ($this->isTextField($tableName, $fieldName) || $this->isDateField($tableName, $fieldName)) {
             if (false === $silent) {
                 $this->debugFlush('Emptying ' . $tableName . '.' . $fieldName, 'obsolete');
             }
@@ -119,6 +127,17 @@ class DatabaseActions
             $sql = '
                 UPDATE "' . $tableName . '"
                 SET "' . $fieldName . '" = CONCAT(' . $r . ', ' . $r . ', ' . $r . ", '@', " . $r . ', ' . $r . ", '.', " . $r . ')
+                WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+            $this->executeSql($sql);
+
+            return true;
+        } elseif ($this->isDateField($tableName, $fieldName)) {
+            $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
+            // $sortStatement = $this->getSortStatement($tableName);
+            $date = "01-01-1974";
+            $sql = '
+                UPDATE "' . $tableName . '"
+                SET "' . $fieldName . '" = \''.$date.'\'
                 WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
             $this->executeSql($sql);
 
@@ -204,11 +223,21 @@ class DatabaseActions
         ')->value());
     }
 
-    protected function isTextField(string $tableName, string $fieldName)
+    protected function isTextField(string $tableName, string $fieldName): bool
+    {
+        return $this->isSomeTypeOfField($tableName, $fieldName,self::TEXT_FIELDS);
+    }
+
+    protected function isDateField(string $tableName, string $fieldName) : bool
+    {
+        return $this->isSomeTypeOfField($tableName, $fieldName,self::DATE_FIELDS);
+    }
+
+    protected function isSomeTypeOfField(string $tableName, string $fieldName, array $typeStrings) : bool
     {
         $details = $this->getAllFieldsForOneTableDetails($tableName);
         if (isset($details[$fieldName])) {
-            foreach (self::TEXT_FIELDS as $test) {
+            foreach ($typeStrings as $test) {
                 if (0 === stripos(strtolower($details[$fieldName]), $test)) {
                     return true;
                 }
@@ -216,6 +245,7 @@ class DatabaseActions
         } else {
             FlushNow::do_flush('ERROR: could not find: ' . $tableName . '.' . $fieldName, 'bad');
         }
+        return false;
     }
 
     protected function turnPercentageIntoLimit(string $tableName, float $percentageToKeep): int
