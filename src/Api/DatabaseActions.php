@@ -134,11 +134,11 @@ class DatabaseActions
         } elseif ($this->isDateField($tableName, $fieldName)) {
             $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
             // $sortStatement = $this->getSortStatement($tableName);
-            $date = "01-01-1974";
+            // randomise by three years
             $sql = '
                 UPDATE "' . $tableName . '"
-                SET "' . $fieldName . '" = \''.$date.'\'
-                WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+                SET "' . $fieldName . '" = DATE_ADD("'.$fieldName.'", INTERVAL ((1 - ROUND((RAND()))*2)*999) DAY)
+                WHERE "' . $fieldName . '" IS NOT NULL';
             $this->executeSql($sql);
 
             return true;
