@@ -250,8 +250,8 @@ class DatabaseActions
 
     protected function turnPercentageIntoLimit(string $tableName, float $percentageToKeep): int
     {
-        $count = DB::query('SELECT COUNT(*) FROM "' . $tableName . '"')->value();
-
+        $count = DB::query('SELECT COUNT("ID") FROM "' . $tableName . '"')->value();
+        $count = intval($count);
         return (int) round($percentageToKeep * $count);
     }
 
