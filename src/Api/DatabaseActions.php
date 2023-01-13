@@ -131,13 +131,14 @@ class DatabaseActions
             $this->executeSql($sql);
 
             return true;
-        } elseif ($this->isDateField($tableName, $fieldName)) {
+        }
+        if ($this->isDateField($tableName, $fieldName)) {
             $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
             // $sortStatement = $this->getSortStatement($tableName);
             // randomise by three years
             $sql = '
                 UPDATE "' . $tableName . '"
-                SET "' . $fieldName . '" = DATE_ADD("'.$fieldName.'", INTERVAL ((1 - ROUND((RAND()))*2)*999) DAY)
+                SET "' . $fieldName . '" = DATE_ADD("' . $fieldName . '", INTERVAL ((1 - ROUND((RAND()))*2)*999) DAY)
                 WHERE "' . $fieldName . '" IS NOT NULL';
             $this->executeSql($sql);
 
@@ -225,15 +226,15 @@ class DatabaseActions
 
     protected function isTextField(string $tableName, string $fieldName): bool
     {
-        return $this->isSomeTypeOfField($tableName, $fieldName,self::TEXT_FIELDS);
+        return $this->isSomeTypeOfField($tableName, $fieldName, self::TEXT_FIELDS);
     }
 
-    protected function isDateField(string $tableName, string $fieldName) : bool
+    protected function isDateField(string $tableName, string $fieldName): bool
     {
-        return $this->isSomeTypeOfField($tableName, $fieldName,self::DATE_FIELDS);
+        return $this->isSomeTypeOfField($tableName, $fieldName, self::DATE_FIELDS);
     }
 
-    protected function isSomeTypeOfField(string $tableName, string $fieldName, array $typeStrings) : bool
+    protected function isSomeTypeOfField(string $tableName, string $fieldName, array $typeStrings): bool
     {
         $details = $this->getAllFieldsForOneTableDetails($tableName);
         if (isset($details[$fieldName])) {
@@ -245,6 +246,7 @@ class DatabaseActions
         } else {
             FlushNow::do_flush('ERROR: could not find: ' . $tableName . '.' . $fieldName, 'bad');
         }
+
         return false;
     }
 
@@ -252,6 +254,7 @@ class DatabaseActions
     {
         $count = DB::query('SELECT COUNT("ID") FROM "' . $tableName . '"')->value();
         $count = intval($count);
+
         return (int) round($percentageToKeep * $count);
     }
 

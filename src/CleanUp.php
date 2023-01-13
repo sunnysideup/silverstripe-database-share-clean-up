@@ -2,7 +2,6 @@
 
 namespace Sunnysideup\DatabaseShareCleanUp;
 
-use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
@@ -104,7 +103,6 @@ class CleanUp extends BuildTask
 
         return $this;
     }
-
 
     /**
      * Implement this method in the task subclass to
