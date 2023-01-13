@@ -43,8 +43,8 @@ class DatabaseActions
 
     public function emptyVersionedTable(string $tableName): bool
     {
-        if ('_Versions' === substr($tableName, -9)) {
-            $nonVersionedTable = substr($tableName, 0, strlen($tableName) - 9);
+        if ('_Versions' === substr((string) $tableName, -9)) {
+            $nonVersionedTable = substr((string) $tableName, 0, strlen($tableName) - 9);
             if ($this->hasTable($nonVersionedTable)) {
                 $this->truncateTable($tableName);
                 $fields = $this->getAllFieldsForOneTable($nonVersionedTable);

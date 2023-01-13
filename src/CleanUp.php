@@ -221,7 +221,7 @@ class CleanUp extends BuildTask
             $fields = $this->database->getAllFieldsForOneTable($tableName);
 
             foreach ($fields as $fieldName) {
-                if ('ID' === substr($fieldName, -2)) {
+                if ('ID' === substr((string) $fieldName, -2)) {
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping!';
                     }
