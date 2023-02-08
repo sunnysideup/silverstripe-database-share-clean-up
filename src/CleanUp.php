@@ -7,6 +7,7 @@ use SilverStripe\Dev\BuildTask;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
 use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
 use Sunnysideup\Flush\FlushNow;
+use Sunnysideup\Flush\FlushNowImplementor;
 
 class CleanUp extends BuildTask
 {
@@ -131,9 +132,9 @@ class CleanUp extends BuildTask
         $this->database->setDebug($this->debug);
 
         if ($this->forReal) {
-            FlushNow::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
+            FlushNowImplementor::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
         } else {
-            FlushNow::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
+            FlushNowImplementor::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
         }
         if ($this->anonymise) {
             $this->anonymiser->AnonymisePresets();
@@ -183,7 +184,7 @@ class CleanUp extends BuildTask
                 continue;
             }
             $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
-            if ($this->selectedTables && ! in_array($tableName, $this->selectedTableList, true)) {
+            if ($this->selectedTables && !in_array($tableName, $this->selectedTableList, true)) {
                 $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
 
                 continue;

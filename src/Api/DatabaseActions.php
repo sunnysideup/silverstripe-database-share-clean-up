@@ -4,6 +4,7 @@ namespace Sunnysideup\DatabaseShareCleanUp\Api;
 
 use SilverStripe\ORM\DB;
 use Sunnysideup\Flush\FlushNow;
+use Sunnysideup\Flush\FlushNowImplementor;
 
 class DatabaseActions
 {
@@ -50,7 +51,7 @@ class DatabaseActions
                 $fields = $this->getAllFieldsForOneTable($nonVersionedTable);
                 $fields = array_combine($fields, $fields);
                 foreach ($fields as $fieldName) {
-                    if (! ($this->hasField($tableName, $fieldName) && $this->hasField($nonVersionedTable, $fieldName))) {
+                    if (!($this->hasField($tableName, $fieldName) && $this->hasField($nonVersionedTable, $fieldName))) {
                         unset($fields[$fieldName]);
                     }
                 }
@@ -66,7 +67,7 @@ class DatabaseActions
 
                 return true;
             }
-            FlushNow::do_flush('ERROR: could not find: ' . $nonVersionedTable, 'bad');
+            FlushNowImplementor::do_flush('ERROR: could not find: ' . $nonVersionedTable, 'bad');
         }
 
         return false;
@@ -185,7 +186,7 @@ class DatabaseActions
 
     public function getAllFieldsForOneTableDetails(string $tableName): array
     {
-        if (! isset(self::$fieldsForTable[$tableName])) {
+        if (!isset(self::$fieldsForTable[$tableName])) {
             self::$fieldsForTable[$tableName] = [];
             if ($this->hasTable($tableName)) {
                 self::$fieldsForTable[$tableName] = DB::field_list($tableName);
@@ -244,7 +245,7 @@ class DatabaseActions
                 }
             }
         } else {
-            FlushNow::do_flush('ERROR: could not find: ' . $tableName . '.' . $fieldName, 'bad');
+            FlushNowImplementor::do_flush('ERROR: could not find: ' . $tableName . '.' . $fieldName, 'bad');
         }
 
         return false;
@@ -291,7 +292,7 @@ class DatabaseActions
     protected function debugFlush(string $message, string $type)
     {
         if ($this->debug) {
-            FlushNow::do_flush($message, $type);
+            FlushNowImplementor::do_flush($message, $type);
         }
     }
 }
