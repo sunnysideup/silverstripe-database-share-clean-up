@@ -25,6 +25,8 @@ class Anonymiser
         'City',
         'Suburb',
         'Address',
+        'Street',
+        'Address2',
         'Phone',
         'Mobile',
         'FirstName',
