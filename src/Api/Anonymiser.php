@@ -37,6 +37,7 @@ class Anonymiser
         'Ip',
         'IP',
         'IpAddress',
+        'Proxy',
     ];
 
     /**
