@@ -45,11 +45,8 @@ class DatabaseActions
     public function emptyVersionedTable(string $tableName, ?bool $leaveLastVersion = false): bool
     {
         $specialCase = in_array($tableName, ['ChangeSet', 'ChangeSetItem', 'ChangeSetItem_ReferencedBy']);
-        echo 'CCCC';
         if ('_Versions' === substr((string) $tableName, -9) || $specialCase) {
-            echo 'AAA';
-            $nonVersionedTable = substr((string) $tableName, 0, strlen( (string) $tableName) - 9);
-            echo 'BBB';
+            $nonVersionedTable = substr((string) $tableName, 0, strlen((string) $tableName) - 9);
             if ($this->hasTable($nonVersionedTable) ||  $specialCase) {
                 $this->truncateTable($tableName);
                 if ($leaveLastVersion) {
@@ -82,7 +79,6 @@ class DatabaseActions
     public function deleteObsoleteTables(string $tableName): bool
     {
         if (0 === strpos($tableName, '_obsolete_')) {
-            echo 'BBBB' . $tableName;
             $this->deleteTable($tableName);
 
             return true;
