@@ -51,9 +51,7 @@ class CleanUp extends BuildTask
 
     private static $tables_to_delete_forever = [];
 
-    private static $tables_to_be_cleaned = [
-        'LoginAttempt',
-    ];
+    private static $tables_to_be_cleaned = [];
 
     private static $fields_to_be_cleaned = [];
 
