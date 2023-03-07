@@ -47,6 +47,7 @@ class Anonymiser
      */
     private static $tables_to_remove = [
         'MemberPassword',
+        'LoginAttempt',
     ];
 
     /**

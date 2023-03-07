@@ -42,28 +42,31 @@ class DatabaseActions
         $this->debug = $bool;
     }
 
-    public function emptyVersionedTable(string $tableName): bool
+    public function emptyVersionedTable(string $tableName, ?bool $leaveLastVersion = false): bool
     {
-        if ('_Versions' === substr((string) $tableName, -9)) {
+        $specialCase = in_array($tableName, ['ChangeSet', 'ChangeSetItem', 'ChangeSetItem_ReferencedBy']);
+        if ('_Versions' === substr((string) $tableName, -9) || $specialCase) {
             $nonVersionedTable = substr((string) $tableName, 0, strlen((string) $tableName) - 9);
-            if ($this->hasTable($nonVersionedTable)) {
+            if ($this->hasTable($nonVersionedTable) ||  $specialCase) {
                 $this->truncateTable($tableName);
-                $fields = $this->getAllFieldsForOneTable($nonVersionedTable);
-                $fields = array_combine($fields, $fields);
-                foreach ($fields as $fieldName) {
-                    if (!($this->hasField($tableName, $fieldName) && $this->hasField($nonVersionedTable, $fieldName))) {
-                        unset($fields[$fieldName]);
+                if ($leaveLastVersion) {
+                    $fields = $this->getAllFieldsForOneTable($nonVersionedTable);
+                    $fields = array_combine($fields, $fields);
+                    foreach ($fields as $fieldName) {
+                        if (!($this->hasField($tableName, $fieldName) && $this->hasField($nonVersionedTable, $fieldName))) {
+                            unset($fields[$fieldName]);
+                        }
                     }
+                    $fields['ID'] = 'RecordID';
+                    unset($fields['Version']);
+                    $fields['VERSION_NUMBER_HERE'] = 'Version';
+                    $sql = '
+                        INSERT INTO "' . $tableName . '" ("' . implode('", "', $fields) . '")
+                        SELECT "' . implode('", "', array_keys($fields)) . '" FROM "' . $nonVersionedTable . '";';
+                    $sql = str_replace('"VERSION_NUMBER_HERE"', '1', $sql);
+                    $this->debugFlush('Copying unversioned from ' . $nonVersionedTable . ' into ' . $tableName, 'info');
+                    $this->executeSql($sql);
                 }
-                $fields['ID'] = 'RecordID';
-                unset($fields['Version']);
-                $fields['VERSION_NUMBER_HERE'] = 'Version';
-                $sql = '
-                    INSERT INTO "' . $tableName . '" ("' . implode('", "', $fields) . '")
-                    SELECT "' . implode('", "', array_keys($fields)) . '" FROM "' . $nonVersionedTable . '";';
-                $sql = str_replace('"VERSION_NUMBER_HERE"', '1', $sql);
-                $this->debugFlush('Copying unversioned from ' . $nonVersionedTable . ' into ' . $tableName, 'info');
-                $this->executeSql($sql);
 
                 return true;
             }
@@ -198,12 +201,20 @@ class DatabaseActions
 
     public function isEmptyTable(string $tableName): bool
     {
-        return 0 === $this->countRows($tableName);
+        if ($this->tableExists($tableName)) {
+            return 0 === $this->countRows($tableName);
+        }
+        return true;
     }
 
     public function countRows(string $tableName): int
     {
         return (int) DB::query('SELECT COUNT(*) FROM "' . $tableName . '";')->value();
+    }
+
+    public function tableExists(string $tableName): bool
+    {
+        return DB::query('SHOW TABLES LIKE \'' . $tableName . '\';')->value() ? true : false;
     }
 
     public function getTableSizeInMegaBytes(string $tableName): float

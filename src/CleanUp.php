@@ -51,9 +51,7 @@ class CleanUp extends BuildTask
 
     private static $tables_to_delete_forever = [];
 
-    private static $tables_to_be_cleaned = [
-        'LoginAttempt',
-    ];
+    private static $tables_to_be_cleaned = [];
 
     private static $fields_to_be_cleaned = [];
 
@@ -143,6 +141,7 @@ class CleanUp extends BuildTask
         $this->createForm();
         $this->runInner();
         $this->createTable();
+        echo "MEMORY USED:" . $this->formatBytes(memory_get_peak_usage());
     }
 
     protected function runInner()
@@ -162,6 +161,9 @@ class CleanUp extends BuildTask
 
         $tables = $this->database->getAllTables();
         foreach ($tables as $tableName) {
+            if (!$this->database->tableExists($tableName)) {
+                continue;
+            }
             $this->data[$tableName] = [
                 'TableName' => $tableName,
                 'SizeAfter' => 0,
@@ -173,19 +175,6 @@ class CleanUp extends BuildTask
                 if ($this->debug) {
                     $this->data[$tableName]['Actions'][] = 'Skipped because it is in list of tables to keep.';
                 }
-
-                continue;
-            }
-            if ($this->database->isEmptyTable($tableName)) {
-                if ($this->debug) {
-                    $this->data[$tableName]['Actions'][] = 'Skipped because table is empty.';
-                }
-
-                continue;
-            }
-            $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
-            if ($this->selectedTables && !in_array($tableName, $this->selectedTableList, true)) {
-                $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
 
                 continue;
             }
@@ -203,10 +192,24 @@ class CleanUp extends BuildTask
                 }
             }
 
+            if ($this->database->isEmptyTable($tableName)) {
+                if ($this->debug) {
+                    $this->data[$tableName]['Actions'][] = 'Skipped because table is empty.';
+                }
+
+                continue;
+            }
+            $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
+            if ($this->selectedTables && !in_array($tableName, $this->selectedTableList, true)) {
+                $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
+
+                continue;
+            }
+
             if ($this->removeOldVersions) {
                 $outcome = $this->database->emptyVersionedTable($tableName);
                 if ($outcome) {
-                    $this->data[$tableName]['Actions'][] = 'Remove all and replace with one entry for each record.';
+                    $this->data[$tableName]['Actions'][] = 'Remove all versions.';
                 }
             }
 
@@ -435,5 +438,13 @@ html;
             <tbody>' . $tbody . '</tbody>
         </table>
     </form>';
+    }
+
+    private function formatBytes($size, $precision = 2)
+    {
+        $base = log($size, 1024);
+        $suffixes = array('', 'K', 'M', 'G', 'T');
+
+        return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
     }
 }
