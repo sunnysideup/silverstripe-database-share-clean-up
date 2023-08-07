@@ -26,6 +26,8 @@ class Anonymiser
         'Suburb',
         'Address',
         'Street',
+        'Company',
+        'CompanyName',
         'Address2',
         'Phone',
         'Mobile',
