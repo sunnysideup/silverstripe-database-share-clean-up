@@ -1,4 +1,4 @@
-# how it works:
+# how it works
 
 1. browse to `/dev/tasks/database-share-clean-up` (using command line or browser)
 
@@ -10,6 +10,5 @@
    where the record is more than `CleanUp::$days_back`
 
    These three values can be set with yml.
-
 
 3. it will look at any table / field that may be sensitive and remove data (e.g. any Email field).
