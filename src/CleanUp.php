@@ -374,7 +374,7 @@ html;
             $totalSizeBefore += $data['SizeBefore'];
             $totalSizeAfter += $data['SizeAfter'];
             $actions = '';
-            if (count($data['Actions'])) {
+            if (count($data['Actions']) > 0) {
                 $actions = '
                         <ul>
                             <li>

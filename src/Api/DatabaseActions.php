@@ -45,8 +45,8 @@ class DatabaseActions
     public function emptyVersionedTable(string $tableName, ?bool $leaveLastVersion = false): bool
     {
         $specialCase = in_array($tableName, ['ChangeSet', 'ChangeSetItem', 'ChangeSetItem_ReferencedBy']);
-        if ('_Versions' === substr((string) $tableName, -9) || $specialCase) {
-            $nonVersionedTable = substr((string) $tableName, 0, strlen((string) $tableName) - 9);
+        if ('_Versions' === substr($tableName, -9) || $specialCase) {
+            $nonVersionedTable = substr($tableName, 0, strlen($tableName) - 9);
             if ($this->hasTable($nonVersionedTable) ||  $specialCase) {
                 $this->truncateTable($tableName);
                 if ($leaveLastVersion) {
@@ -214,7 +214,7 @@ class DatabaseActions
 
     public function tableExists(string $tableName): bool
     {
-        return DB::query('SHOW TABLES LIKE \'' . $tableName . '\';')->value() ? true : false;
+        return (bool) DB::query('SHOW TABLES LIKE \'' . $tableName . '\';')->value();
     }
 
     public function getTableSizeInMegaBytes(string $tableName): float
