@@ -6,7 +6,6 @@ use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
 use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
-use Sunnysideup\Flush\FlushNow;
 use Sunnysideup\Flush\FlushNowImplementor;
 
 class CleanUp extends BuildTask
@@ -141,7 +140,7 @@ class CleanUp extends BuildTask
         $this->createForm();
         $this->runInner();
         $this->createTable();
-        echo "MEMORY USED:" . $this->formatBytes(memory_get_peak_usage());
+        echo 'MEMORY USED:' . $this->formatBytes(memory_get_peak_usage());
     }
 
     protected function runInner()
@@ -161,7 +160,7 @@ class CleanUp extends BuildTask
 
         $tables = $this->database->getAllTables();
         foreach ($tables as $tableName) {
-            if (!$this->database->tableExists($tableName)) {
+            if (! $this->database->tableExists($tableName)) {
                 continue;
             }
             $this->data[$tableName] = [
@@ -200,7 +199,7 @@ class CleanUp extends BuildTask
                 continue;
             }
             $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
-            if ($this->selectedTables && !in_array($tableName, $this->selectedTableList, true)) {
+            if ($this->selectedTables && ! in_array($tableName, $this->selectedTableList, true)) {
                 $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
 
                 continue;
@@ -443,7 +442,7 @@ html;
     private function formatBytes($size, $precision = 2)
     {
         $base = log($size, 1024);
-        $suffixes = array('', 'K', 'M', 'G', 'T');
+        $suffixes = ['', 'K', 'M', 'G', 'T'];
 
         return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
     }

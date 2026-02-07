@@ -3,7 +3,6 @@
 namespace Sunnysideup\DatabaseShareCleanUp\Api;
 
 use SilverStripe\ORM\DB;
-use Sunnysideup\Flush\FlushNow;
 use Sunnysideup\Flush\FlushNowImplementor;
 
 class DatabaseActions
@@ -47,13 +46,13 @@ class DatabaseActions
         $specialCase = in_array($tableName, ['ChangeSet', 'ChangeSetItem', 'ChangeSetItem_ReferencedBy']);
         if ('_Versions' === substr($tableName, -9) || $specialCase) {
             $nonVersionedTable = substr($tableName, 0, strlen($tableName) - 9);
-            if ($this->hasTable($nonVersionedTable) ||  $specialCase) {
+            if ($this->hasTable($nonVersionedTable) || $specialCase) {
                 $this->truncateTable($tableName);
                 if ($leaveLastVersion) {
                     $fields = $this->getAllFieldsForOneTable($nonVersionedTable);
                     $fields = array_combine($fields, $fields);
                     foreach ($fields as $fieldName) {
-                        if (!($this->hasField($tableName, $fieldName) && $this->hasField($nonVersionedTable, $fieldName))) {
+                        if (! ($this->hasField($tableName, $fieldName) && $this->hasField($nonVersionedTable, $fieldName))) {
                             unset($fields[$fieldName]);
                         }
                     }
@@ -189,7 +188,7 @@ class DatabaseActions
 
     public function getAllFieldsForOneTableDetails(string $tableName): array
     {
-        if (!isset(self::$fieldsForTable[$tableName])) {
+        if (! isset(self::$fieldsForTable[$tableName])) {
             self::$fieldsForTable[$tableName] = [];
             if ($this->hasTable($tableName)) {
                 self::$fieldsForTable[$tableName] = DB::field_list($tableName);
