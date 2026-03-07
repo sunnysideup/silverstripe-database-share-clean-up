@@ -121,35 +121,188 @@ class DatabaseActions
         return false;
     }
 
-    public function anonymiseField(string $tableName, string $fieldName): bool
+    private function getRandomCharExpr(): string
     {
-        if ($this->isTextField($tableName, $fieldName)) {
-            $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
-            // $sortStatement = $this->getSortStatement($tableName);
-            $r = "SUBSTR('0123456789abcdefghihjlmnopqrstuvwxyz',(RAND()*35)+1,1)";
-            $sql = '
-                UPDATE "' . $tableName . '"
-                SET "' . $fieldName . '" = CONCAT(' . $r . ', ' . $r . ', ' . $r . ", '@', " . $r . ', ' . $r . ", '.', " . $r . ')
-                WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
-            $this->executeSql($sql);
+        return "SUBSTR('0123456789abcdefghijklmnopqrstuvwxyz',(RAND()*35)+1,1)";
+    }
 
-            return true;
-        }
-        if ($this->isDateField($tableName, $fieldName)) {
-            $this->debugFlush('Anonymising ' . $tableName . '.' . $fieldName, 'repaired');
-            // $sortStatement = $this->getSortStatement($tableName);
-            // randomise by three years
-            $sql = '
-                UPDATE "' . $tableName . '"
-                SET "' . $fieldName . '" = DATE_ADD("' . $fieldName . '", INTERVAL ((1 - ROUND((RAND()))*2)*999) DAY)
-                WHERE "' . $fieldName . '" IS NOT NULL';
-            $this->executeSql($sql);
+    private function r(int $count = 1): string
+    {
+        $r = $this->getRandomCharExpr();
+        return implode(', ', array_fill(0, $count, $r));
+    }
 
-            return true;
-        }
-        $this->debugFlush('Skipping anonymising ' . $tableName . '.' . $fieldName . ' as this is not a text field', 'info');
+    private function updateSql(string $tableName, string $fieldName, string $expr): string
+    {
+        return '
+        UPDATE "' . $tableName . '"
+        SET "' . $fieldName . '" = ' . $expr . '
+        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+    }
 
-        return false;
+    protected function anonymiseEmail(string $tableName, string $fieldName): void
+    {
+        // e.g. abc123@xy.zz
+        $r = $this->getRandomCharExpr();
+        $expr = 'CONCAT(' . $this->r(5) . ", '@', " . $this->r(3) . ", '.', " . $this->r(2) . ')';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseUsername(string $tableName, string $fieldName): void
+    {
+        $this->anonymiseEmail($tableName, $fieldName);
+    }
+
+    protected function anonymiseFirstName(string $tableName, string $fieldName): void
+    {
+        // e.g. Abcdef
+        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
+        $expr = 'CONCAT(' . $upper . ', ' . $this->r(5) . ')';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseSurname(string $tableName, string $fieldName): void
+    {
+        $this->anonymiseFirstName($tableName, $fieldName);
+    }
+
+    protected function anonymiseLastName(string $tableName, string $fieldName): void
+    {
+        $this->anonymiseFirstName($tableName, $fieldName);
+    }
+
+    protected function anonymiseCity(string $tableName, string $fieldName): void
+    {
+        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
+        $expr = 'CONCAT(' . $upper . ', ' . $this->r(6) . ')';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseSuburb(string $tableName, string $fieldName): void
+    {
+        $this->anonymiseCity($tableName, $fieldName);
+    }
+
+    protected function anonymiseAddress(string $tableName, string $fieldName): void
+    {
+        // e.g. 42 Abcdef St
+        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
+        $suffixes = "'St', 'Rd', 'Ave', 'Ln', 'Cres', 'Pl'";
+        $expr = 'CONCAT(
+        FLOOR(RAND()*999)+1, \' \',
+        ' . $upper . ',
+        ' . $this->r(5) . ',
+        \' \',
+        ELT(FLOOR(RAND()*6)+1, ' . $suffixes . ')
+    )';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseStreet(string $tableName, string $fieldName): void
+    {
+        // e.g. Abcdef Street
+        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
+        $suffixes = "'Street', 'Road', 'Avenue', 'Lane', 'Crescent', 'Place'";
+        $expr = 'CONCAT(
+        ' . $upper . ',
+        ' . $this->r(5) . ',
+        \' \',
+        ELT(FLOOR(RAND()*6)+1, ' . $suffixes . ')
+    )';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseAddress2(string $tableName, string $fieldName): void
+    {
+        // e.g. Apt 42
+        $types = "'Apt', 'Suite', 'Unit', 'Floor'";
+        $expr = 'CONCAT(ELT(FLOOR(RAND()*4)+1, ' . $types . '), \' \', FLOOR(RAND()*99)+1)';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseCompany(string $tableName, string $fieldName): void
+    {
+        // e.g. Abcdef Ltd
+        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
+        $suffixes = "'Ltd', 'Inc', 'Co', 'Group', 'Holdings'";
+        $expr = 'CONCAT(
+        ' . $upper . ',
+        ' . $this->r(5) . ',
+        \' \',
+        ELT(FLOOR(RAND()*5)+1, ' . $suffixes . ')
+    )';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseCompanyName(string $tableName, string $fieldName): void
+    {
+        $this->anonymiseCompany($tableName, $fieldName);
+    }
+
+    protected function anonymisePhone(string $tableName, string $fieldName): void
+    {
+        // e.g. 09-456-7890
+        $expr = "CONCAT('0', FLOOR(RAND()*7)+2, '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)";
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseMobile(string $tableName, string $fieldName): void
+    {
+        // e.g. 021-456-7890
+        $prefixes = "'021', '022', '027', '028'";
+        $expr = "CONCAT(ELT(FLOOR(RAND()*4)+1, $prefixes), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)";
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseFax(string $tableName, string $fieldName): void
+    {
+        $prefixes = "'03', '04', '06', '07', '09'";
+        $expr = "CONCAT(ELT(FLOOR(RAND()*5)+1, $prefixes), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)";
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    protected function anonymiseDob(string $tableName, string $fieldName): void
+    {
+        $sql = '
+        UPDATE "' . $tableName . '"
+        SET "' . $fieldName . '" = DATE_FORMAT(
+            DATE_ADD("1970-01-01", INTERVAL FLOOR(RAND()*12783) DAY),
+            \'%d/%m/%Y\'
+        )
+        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+        $this->executeSql($sql);
+    }
+
+
+    protected function anonymiseDateOfBirth(string $tableName, string $fieldName): void
+    {
+        $sql = '
+        UPDATE "' . $tableName . '"
+        SET "' . $fieldName . '" = DATE_ADD("1970-01-01", INTERVAL FLOOR(RAND()*12783) DAY)
+        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+        $this->executeSql($sql);
+    }
+
+    protected function anonymiseIp(string $tableName, string $fieldName): void
+    {
+        $expr = "CONCAT(
+        FLOOR(RAND()*253)+1, '.',
+        FLOOR(RAND()*255), '.',
+        FLOOR(RAND()*255), '.',
+        FLOOR(RAND()*253)+1
+    )";
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+
+    protected function anonymiseIpAddress(string $tableName, string $fieldName): void
+    {
+        $this->anonymiseIp($tableName, $fieldName);
+    }
+
+    protected function anonymiseProxy(string $tableName, string $fieldName): void
+    {
+        $this->anonymiseIp($tableName, $fieldName);
     }
 
     public function removeOldRowsFromTable(string $tableName, float $percentageToKeep)
@@ -304,5 +457,18 @@ class DatabaseActions
         if ($this->debug) {
             FlushNowImplementor::do_flush($message, $type);
         }
+    }
+    /**
+     * Calls the appropriate anonymise method on the databaseActions object.
+     */
+    public function CallAnonymiseMethod(string $fieldType, string $tableName, string $fieldName): bool
+    {
+        $method = 'anonymise' . $fieldType;
+        if (!method_exists($this, $method)) {
+            throw new \RuntimeException("Anonymisation method '{$method}' does not exist on " . get_class($this));
+        }
+
+        $this->$method($tableName, $fieldName);
+        return true;
     }
 }
