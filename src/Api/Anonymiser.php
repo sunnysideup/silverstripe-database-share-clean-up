@@ -119,12 +119,12 @@ class Anonymiser
         if (in_array($tableName . '.' . $fieldName, $this->config()->get('keep_table_field_combos'), true)) {
             return false;
         }
-        $fieldName = strtolower($fieldName);
+        $fieldNameLower = strtolower($fieldName);
         foreach ($this->config()->get('fields_to_anonymise') as $fieldPattern => $fieldType) {
-            if ($fieldName === strtolower($fieldPattern)) {
+            if ($fieldNameLower === strtolower($fieldPattern)) {
                 return $this->databaseActions->CallAnonymiseMethod($fieldType, $tableName, $fieldName);
             } else {
-                if (str_contains($fieldName, strtolower($fieldPattern))) {
+                if (str_contains($fieldNameLower, strtolower($fieldPattern))) {
                     DB::alteration_message('Also consider: ' . $fieldName . ' contains:' . $fieldPattern, 'info');
                 }
             }
