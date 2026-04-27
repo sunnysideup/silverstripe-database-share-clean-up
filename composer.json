@@ -28,19 +28,13 @@
     }
   ],
   "require": {
-    "silverstripe/recipe-core": "^6.0"
+    "silverstripe/recipe-core": "^6.0",
+    "sunnysideup/flush": "dev-main"
   },
   "suggest": [],
   "autoload": {
     "psr-4": {
       "Sunnysideup\\DatabaseShareCleanUp\\": "src/"
-    }
-  },
-  "yet-to-update": {
-    "sunnysideup/flush": {
-      "section": "require",
-      "current": "^5.0-dev",
-      "reason": "no-compatible-stable-release"
     }
   }
 }
