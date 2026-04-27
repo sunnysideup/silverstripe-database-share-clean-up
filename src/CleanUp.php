@@ -2,7 +2,10 @@
 
 namespace Sunnysideup\DatabaseShareCleanUp;
 
-use SilverStripe\Control\HTTPRequest;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use SilverStripe\PolyExecution\PolyOutput;
 use SilverStripe\Dev\BuildTask;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
 use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
@@ -20,13 +23,13 @@ class CleanUp extends BuildTask
      * @var string Shown in the overview on the {@link TaskRunner}
      *             HTML or CLI interface. Should be short and concise, no HTML allowed.
      */
-    protected $title = 'Cleanup and anonymise database - CAREFUL! Data will be deleted.';
+    protected string $title = 'Cleanup and anonymise database - CAREFUL! Data will be deleted.';
 
     /**
      * @var string Describe the implications the task has,
      *             and the changes it makes. Accepts HTML formatting.
      */
-    protected $description = 'Goes through database and deletes data that may expose personal information and bloat database.';
+    protected static string $description = 'Goes through database and deletes data that may expose personal information and bloat database.';
 
     protected $forReal = false;
 
@@ -86,7 +89,7 @@ class CleanUp extends BuildTask
      *
      * @var string
      */
-    private static $segment = 'database-share-clean-up';
+    protected static string $commandName = 'database-share-clean-up';
 
     public function setAnonymiser($anonymiser)
     {
@@ -102,45 +105,58 @@ class CleanUp extends BuildTask
         return $this;
     }
 
+    public function getOptions(): array
+    {
+        return [
+            new InputOption('anonymise', 'a', InputOption::VALUE_NONE, 'Anonymise data'),
+            new InputOption('removeobsolete', 'o', InputOption::VALUE_NONE, 'Remove obsolete tables'),
+            new InputOption('removeoldversions', 'v', InputOption::VALUE_NONE, 'Remove versioned table entries'),
+            new InputOption('removerows', 'r', InputOption::VALUE_NONE, 'Remove old rows if there are too many (not recommended)'),
+            new InputOption('emptyfields', 'e', InputOption::VALUE_NONE, 'Empty large fields'),
+            new InputOption('selectedtables', 's', InputOption::VALUE_NONE, 'Apply to selected tables only'),
+            new InputOption('selectedtablelist', 'l', InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'List of selected tables'),
+            new InputOption('debug', 'd', InputOption::VALUE_NONE, 'Enable debug mode'),
+            new InputOption('forreal', 'f', InputOption::VALUE_NONE, 'Execute for real (not a dry run)'),
+        ];
+    }
+
     /**
      * Implement this method in the task subclass to
      * execute via the TaskRunner.
-     *
-     * @param HTTPRequest $request
      */
-    public function run($request)
+    protected function execute(InputInterface $input, PolyOutput $output): int
     {
-        $this->anonymise = (bool) $request->getVar('anonymise');
-        $this->removeObsolete = (bool) $request->getVar('removeobsolete');
-        $this->removeOldVersions = (bool) $request->getVar('removeoldversions');
-        $this->removeRows = (bool) $request->getVar('removerows');
-        $this->emptyFields = (bool) $request->getVar('emptyfields');
-
-        $this->selectedTables = (bool) $request->getVar('selectedtables');
-        $this->debug = (bool) $request->getVar('debug');
-        $this->forReal = (bool) $request->getVar('forreal');
+        $this->anonymise = (bool) $input->getOption('anonymise');
+        $this->removeObsolete = (bool) $input->getOption('removeobsolete');
+        $this->removeOldVersions = (bool) $input->getOption('removeoldversions');
+        $this->removeRows = (bool) $input->getOption('removerows');
+        $this->emptyFields = (bool) $input->getOption('emptyfields');
+        $this->selectedTables = (bool) $input->getOption('selectedtables');
+        $this->debug = (bool) $input->getOption('debug');
+        $this->forReal = (bool) $input->getOption('forreal');
         if ($this->forReal) {
             $this->debug = true;
         }
-        $this->selectedTableList = $request->getVar('selectedtablelist') ?? [];
 
+        $this->selectedTableList = $input->getOption('selectedtablelist') ?? [];
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
         $this->database->setDebug($this->debug);
-
         if ($this->forReal) {
-            FlushNowImplementor::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
+            $output->writeForHtml('<h3>Running in FOR REAL mode</h3>', 'bad');
         } else {
-            FlushNowImplementor::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
+            $output->writeForHtml('<h3>Not runing FOR REAL</h3>', 'good');
         }
+
         if ($this->anonymise) {
             $this->anonymiser->AnonymisePresets();
         }
 
-        $this->createForm();
+        $this->createFormInner($output);
         $this->runInner();
-        $this->createTable();
-        echo 'MEMORY USED:' . $this->formatBytes(memory_get_peak_usage());
+        $this->createTableInner($output);
+        $output->writeln('MEMORY USED:' . $this->formatBytes(memory_get_peak_usage()));
+        return Command::SUCCESS;
     }
 
     protected function runInner()
@@ -163,6 +179,7 @@ class CleanUp extends BuildTask
             if (! $this->database->tableExists($tableName)) {
                 continue;
             }
+
             $this->data[$tableName] = [
                 'TableName' => $tableName,
                 'SizeAfter' => 0,
@@ -185,6 +202,7 @@ class CleanUp extends BuildTask
 
                     continue;
                 }
+
                 $outcome = $this->database->deleteObsoleteTables($tableName);
                 if ($outcome) {
                     $this->data[$tableName]['Actions'][] = 'Deleted because it is obsolete.';
@@ -198,6 +216,7 @@ class CleanUp extends BuildTask
 
                 continue;
             }
+
             $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
             if ($this->selectedTables && ! in_array($tableName, $this->selectedTableList, true)) {
                 $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
@@ -218,17 +237,19 @@ class CleanUp extends BuildTask
                     $this->data[$tableName]['Actions'][] = 'Anonymised Table.';
                 }
             }
+
             //get fields
             $fields = $this->database->getAllFieldsForOneTable($tableName);
 
             foreach ($fields as $fieldName) {
-                if ('ID' === substr((string) $fieldName, -2)) {
+                if (str_ends_with((string) $fieldName, 'ID')) {
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping!';
                     }
 
                     continue;
                 }
+
                 if (in_array($fieldName, $fieldsToKeep, true)) {
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping (field is marked as KEEP)!';
@@ -245,12 +266,14 @@ class CleanUp extends BuildTask
 
                     continue;
                 }
+
                 if ($this->anonymise) {
                     $outcome = $this->anonymiser->AnonymiseTableField($tableName, $fieldName);
                     if ($outcome) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': anonymised.';
                     }
                 }
+
                 if ($this->emptyFields) {
                     $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
                     $test1 = $columnSize > $maxColumnSize;
@@ -281,11 +304,12 @@ class CleanUp extends BuildTask
                     }
                 }
             }
+
             $this->data[$tableName]['SizeAfter'] = $this->database->getTableSizeInMegaBytes($tableName);
         }
     }
 
-    protected function createForm()
+    protected function createFormInner(PolyOutput $output)
     {
         $anonymise = $this->anonymise ? 'checked="checked"' : '';
         $removeObsolete = $this->removeObsolete ? 'checked="checked"' : '';
@@ -295,7 +319,7 @@ class CleanUp extends BuildTask
         $selectedTables = $this->selectedTables ? 'checked="checked"' : '';
         $forReal = $this->forReal ? 'checked="checked"' : '';
         $debug = $this->debug ? 'checked="checked"' : '';
-        echo <<<html
+        $html = <<<html
         <h3>All sizes in Megabytes</h3>
         <form method="get">
             <div style="
@@ -356,18 +380,17 @@ class CleanUp extends BuildTask
 
 
 html;
+        $output->writeForHtml($html);
     }
 
-    protected function createTable()
+    protected function createTableInner(PolyOutput $output)
     {
         $tbody = '';
         $totalSizeBefore = 0;
         $totalSizeAfter = 0;
         usort(
             $this->data,
-            function ($a, $b) {
-                return $b['SizeBefore'] <=> $a['SizeBefore'];
-            }
+            fn($a, $b) => $b['SizeBefore'] <=> $a['SizeBefore']
         );
         foreach ($this->data as $data) {
             $totalSizeBefore += $data['SizeBefore'];
@@ -381,6 +404,7 @@ html;
                             </li>
                         </ul>';
             }
+
             $tableList = empty($this->selectedTableList[$data['TableName']]) ? '' : 'checked="checked"';
             $tbody .= '
                 <tr>
@@ -399,6 +423,7 @@ html;
                     </td>
                 </tr>';
         }
+
         $tfoot = '
                 <tr>
                     <th>
@@ -415,7 +440,7 @@ html;
                     </th>
                 </tr>
         ';
-        echo '
+        $html = '
         <table border="1" style="width: calc(100% - 380px);">
             <thead>
                 <tr>
@@ -437,6 +462,7 @@ html;
             <tbody>' . $tbody . '</tbody>
         </table>
     </form>';
+        $output->writeForHtml($html);
     }
 
     private function formatBytes($size, $precision = 2)
@@ -444,6 +470,6 @@ html;
         $base = log($size, 1024);
         $suffixes = ['', 'K', 'M', 'G', 'T'];
 
-        return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
+        return round(1024 ** ($base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
     }
 }
