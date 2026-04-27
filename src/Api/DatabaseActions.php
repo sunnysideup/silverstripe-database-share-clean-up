@@ -2,6 +2,7 @@
 
 namespace Sunnysideup\DatabaseShareCleanUp\Api;
 
+use RuntimeException;
 use SilverStripe\ORM\DB;
 use Sunnysideup\Flush\FlushNowImplementor;
 
@@ -43,8 +44,8 @@ class DatabaseActions
 
     public function emptyVersionedTable(string $tableName, ?bool $leaveLastVersion = false): bool
     {
-        $specialCase = in_array($tableName, ['ChangeSet', 'ChangeSetItem', 'ChangeSetItem_ReferencedBy']);
-        if ('_Versions' === substr($tableName, -9) || $specialCase) {
+        $specialCase = in_array($tableName, ['ChangeSet', 'ChangeSetItem', 'ChangeSetItem_ReferencedBy'], true);
+        if (str_ends_with($tableName, '_Versions') || $specialCase) {
             $nonVersionedTable = substr($tableName, 0, strlen($tableName) - 9);
             if ($this->hasTable($nonVersionedTable) || $specialCase) {
                 $this->truncateTable($tableName);
@@ -56,6 +57,7 @@ class DatabaseActions
                             unset($fields[$fieldName]);
                         }
                     }
+
                     $fields['ID'] = 'RecordID';
                     unset($fields['Version']);
                     $fields['VERSION_NUMBER_HERE'] = 'Version';
@@ -69,6 +71,7 @@ class DatabaseActions
 
                 return true;
             }
+
             FlushNowImplementor::do_flush('ERROR: could not find: ' . $nonVersionedTable, 'bad');
         }
 
@@ -77,7 +80,7 @@ class DatabaseActions
 
     public function deleteObsoleteTables(string $tableName): bool
     {
-        if (0 === strpos($tableName, '_obsolete_')) {
+        if (str_starts_with($tableName, '_obsolete_')) {
             $this->deleteTable($tableName);
 
             return true;
@@ -106,6 +109,7 @@ class DatabaseActions
             if (false === $silent) {
                 $this->debugFlush('Emptying ' . $tableName . '.' . $fieldName, 'obsolete');
             }
+
             $sortStatement = $this->getSortStatement($tableName);
             $sql = '
                 UPDATE "' . $tableName . '"
@@ -116,6 +120,7 @@ class DatabaseActions
 
             return true;
         }
+
         $this->debugFlush('Skipping emptying ' . $tableName . '.' . $fieldName . ' as this is not a text field', 'info');
 
         return false;
@@ -216,7 +221,7 @@ class DatabaseActions
     {
         // e.g. Apt 42
         $types = "'Apt', 'Suite', 'Unit', 'Floor'";
-        $expr = 'CONCAT(ELT(FLOOR(RAND()*4)+1, ' . $types . '), \' \', FLOOR(RAND()*99)+1)';
+        $expr = 'CONCAT(ELT(FLOOR(RAND()*4)+1, ' . $types . "), ' ', FLOOR(RAND()*99)+1)";
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
@@ -250,14 +255,14 @@ class DatabaseActions
     {
         // e.g. 021-456-7890
         $prefixes = "'021', '022', '027', '028'";
-        $expr = "CONCAT(ELT(FLOOR(RAND()*4)+1, $prefixes), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)";
+        $expr = sprintf("CONCAT(ELT(FLOOR(RAND()*4)+1, %s), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)", $prefixes);
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseFax(string $tableName, string $fieldName): void
     {
         $prefixes = "'03', '04', '06', '07', '09'";
-        $expr = "CONCAT(ELT(FLOOR(RAND()*5)+1, $prefixes), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)";
+        $expr = sprintf("CONCAT(ELT(FLOOR(RAND()*5)+1, %s), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)", $prefixes);
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
@@ -356,6 +361,7 @@ class DatabaseActions
         if ($this->tableExists($tableName)) {
             return 0 === $this->countRows($tableName);
         }
+
         return true;
     }
 
@@ -366,7 +372,7 @@ class DatabaseActions
 
     public function tableExists(string $tableName): bool
     {
-        return (bool) DB::query('SHOW TABLES LIKE \'' . $tableName . '\';')->value();
+        return (bool) DB::query("SHOW TABLES LIKE '" . $tableName . "';")->value();
     }
 
     public function getTableSizeInMegaBytes(string $tableName): float
@@ -403,7 +409,7 @@ class DatabaseActions
         $details = $this->getAllFieldsForOneTableDetails($tableName);
         if (isset($details[$fieldName])) {
             foreach ($typeStrings as $test) {
-                if (0 === stripos(strtolower($details[$fieldName]), $test)) {
+                if (0 === stripos(strtolower($details[$fieldName]), (string) $test)) {
                     return true;
                 }
             }
@@ -458,6 +464,7 @@ class DatabaseActions
             FlushNowImplementor::do_flush($message, $type);
         }
     }
+
     /**
      * Calls the appropriate anonymise method on the databaseActions object.
      */
@@ -465,7 +472,7 @@ class DatabaseActions
     {
         $method = 'anonymise' . $fieldType;
         if (!method_exists($this, $method)) {
-            throw new \RuntimeException("Anonymisation method '{$method}' does not exist on " . get_class($this));
+            throw new RuntimeException(sprintf("Anonymisation method '%s' does not exist on ", $method) . static::class);
         }
 
         $this->$method($tableName, $fieldName);

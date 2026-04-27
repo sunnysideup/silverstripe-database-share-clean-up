@@ -122,6 +122,7 @@ class CleanUp extends BuildTask
         if ($this->forReal) {
             $this->debug = true;
         }
+
         $this->selectedTableList = $request->getVar('selectedtablelist') ?? [];
 
         $this->anonymiser->setDatabaseActions($this->database);
@@ -133,6 +134,7 @@ class CleanUp extends BuildTask
         } else {
             FlushNowImplementor::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
         }
+
         if ($this->anonymise) {
             $this->anonymiser->AnonymisePresets();
         }
@@ -163,6 +165,7 @@ class CleanUp extends BuildTask
             if (! $this->database->tableExists($tableName)) {
                 continue;
             }
+
             $this->data[$tableName] = [
                 'TableName' => $tableName,
                 'SizeAfter' => 0,
@@ -185,6 +188,7 @@ class CleanUp extends BuildTask
 
                     continue;
                 }
+
                 $outcome = $this->database->deleteObsoleteTables($tableName);
                 if ($outcome) {
                     $this->data[$tableName]['Actions'][] = 'Deleted because it is obsolete.';
@@ -198,6 +202,7 @@ class CleanUp extends BuildTask
 
                 continue;
             }
+
             $this->data[$tableName]['SizeBefore'] = $this->database->getTableSizeInMegaBytes($tableName);
             if ($this->selectedTables && ! in_array($tableName, $this->selectedTableList, true)) {
                 $this->data[$tableName]['Actions'][] = 'Skipped because it is not a selected table.';
@@ -218,17 +223,19 @@ class CleanUp extends BuildTask
                     $this->data[$tableName]['Actions'][] = 'Anonymised Table.';
                 }
             }
+
             //get fields
             $fields = $this->database->getAllFieldsForOneTable($tableName);
 
             foreach ($fields as $fieldName) {
-                if ('ID' === substr((string) $fieldName, -2)) {
+                if (str_ends_with((string) $fieldName, 'ID')) {
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping!';
                     }
 
                     continue;
                 }
+
                 if (in_array($fieldName, $fieldsToKeep, true)) {
                     if ($this->debug) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': skipping (field is marked as KEEP)!';
@@ -245,12 +252,14 @@ class CleanUp extends BuildTask
 
                     continue;
                 }
+
                 if ($this->anonymise) {
                     $outcome = $this->anonymiser->AnonymiseTableField($tableName, $fieldName);
                     if ($outcome) {
                         $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': anonymised.';
                     }
                 }
+
                 if ($this->emptyFields) {
                     $columnSize = $this->database->getColumnSizeInMegabytes($tableName, $fieldName);
                     $test1 = $columnSize > $maxColumnSize;
@@ -281,6 +290,7 @@ class CleanUp extends BuildTask
                     }
                 }
             }
+
             $this->data[$tableName]['SizeAfter'] = $this->database->getTableSizeInMegaBytes($tableName);
         }
     }
@@ -365,9 +375,7 @@ html;
         $totalSizeAfter = 0;
         usort(
             $this->data,
-            function ($a, $b) {
-                return $b['SizeBefore'] <=> $a['SizeBefore'];
-            }
+            fn($a, $b) => $b['SizeBefore'] <=> $a['SizeBefore']
         );
         foreach ($this->data as $data) {
             $totalSizeBefore += $data['SizeBefore'];
@@ -381,6 +389,7 @@ html;
                             </li>
                         </ul>';
             }
+
             $tableList = empty($this->selectedTableList[$data['TableName']]) ? '' : 'checked="checked"';
             $tbody .= '
                 <tr>
@@ -399,6 +408,7 @@ html;
                     </td>
                 </tr>';
         }
+
         $tfoot = '
                 <tr>
                     <th>
@@ -444,6 +454,6 @@ html;
         $base = log($size, 1024);
         $suffixes = ['', 'K', 'M', 'G', 'T'];
 
-        return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
+        return round(1024 ** ($base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
     }
 }
