@@ -123,6 +123,7 @@ class CleanUp extends BuildTask
         if ($this->forReal) {
             $this->debug = true;
         }
+
         $this->selectedTableList = $request->getVar('selectedtablelist') ?? [];
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
@@ -132,9 +133,11 @@ class CleanUp extends BuildTask
         } else {
             FlushNowImplementor::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
         }
+
         if ($this->anonymise) {
             $this->anonymiser->AnonymisePresets();
         }
+
         $this->createForm();
         $this->runInner();
         $this->createTable();
