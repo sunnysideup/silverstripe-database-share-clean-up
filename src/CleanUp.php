@@ -2,6 +2,8 @@
 
 namespace Sunnysideup\DatabaseShareCleanUp;
 
+use Symfony\Component\Console\Input\InputInterface;
+use SilverStripe\Console\PolyOutput;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
@@ -20,7 +22,7 @@ class CleanUp extends BuildTask
      * @var string Shown in the overview on the {@link TaskRunner}
      *             HTML or CLI interface. Should be short and concise, no HTML allowed.
      */
-    protected $title = 'Cleanup and anonymise database - CAREFUL! Data will be deleted.';
+    protected string $title = 'Cleanup and anonymise database - CAREFUL! Data will be deleted.';
 
     /**
      * @var string Describe the implications the task has,
@@ -86,7 +88,7 @@ class CleanUp extends BuildTask
      *
      * @var string
      */
-    private static $segment = 'database-share-clean-up';
+    protected static string $commandName = 'database-share-clean-up';
 
     public function setAnonymiser($anonymiser)
     {
@@ -108,41 +110,36 @@ class CleanUp extends BuildTask
      *
      * @param HTTPRequest $request
      */
-    public function run($request)
+    protected function execute(InputInterface $input, PolyOutput $output): int
     {
         $this->anonymise = (bool) $request->getVar('anonymise');
         $this->removeObsolete = (bool) $request->getVar('removeobsolete');
         $this->removeOldVersions = (bool) $request->getVar('removeoldversions');
         $this->removeRows = (bool) $request->getVar('removerows');
         $this->emptyFields = (bool) $request->getVar('emptyfields');
-
         $this->selectedTables = (bool) $request->getVar('selectedtables');
         $this->debug = (bool) $request->getVar('debug');
         $this->forReal = (bool) $request->getVar('forreal');
         if ($this->forReal) {
             $this->debug = true;
         }
-
         $this->selectedTableList = $request->getVar('selectedtablelist') ?? [];
-
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
         $this->database->setDebug($this->debug);
-
         if ($this->forReal) {
             FlushNowImplementor::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
         } else {
             FlushNowImplementor::do_flush('<h3>Not runing FOR REAL</h3>', 'good');
         }
-
         if ($this->anonymise) {
             $this->anonymiser->AnonymisePresets();
         }
-
         $this->createForm();
         $this->runInner();
         $this->createTable();
         echo 'MEMORY USED:' . $this->formatBytes(memory_get_peak_usage());
+        return 0;
     }
 
     protected function runInner()
