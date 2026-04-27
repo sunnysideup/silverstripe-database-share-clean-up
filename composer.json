@@ -29,9 +29,9 @@
   ],
   "require": {
     "silverstripe/recipe-core": "^4.0 || ^5.0",
-    "sunnysideup/flush": "5.x-dev"
+    "sunnysideup/flush": "^5.0-dev"
   },
-  "suggest": {},
+  "suggest": [],
   "autoload": {
     "psr-4": {
       "Sunnysideup\\DatabaseShareCleanUp\\": "src/"
