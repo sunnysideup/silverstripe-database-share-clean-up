@@ -2,6 +2,7 @@
 
 namespace Sunnysideup\DatabaseShareCleanUp;
 
+use Override;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -9,7 +10,6 @@ use SilverStripe\PolyExecution\PolyOutput;
 use SilverStripe\Dev\BuildTask;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
 use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
-use Sunnysideup\Flush\FlushNowImplementor;
 
 class CleanUp extends BuildTask
 {
@@ -17,7 +17,7 @@ class CleanUp extends BuildTask
      * @var bool if set to FALSE, keep it from showing in the list
      *           and from being executable through URL or CLI
      */
-    protected $enabled = true;
+    private static bool $is_enabled = true;
 
     /**
      * @var string Shown in the overview on the {@link TaskRunner}
@@ -105,6 +105,7 @@ class CleanUp extends BuildTask
         return $this;
     }
 
+    #[Override]
     public function getOptions(): array
     {
         return [
