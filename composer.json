@@ -17,6 +17,10 @@
     "anonymize",
     "anonymised",
     "anonymized",
+    "versions",
+    "archive",
+    "delete",
+    "prune",
     "Data anonymization"
   ],
   "license": "BSD-3-Clause",
