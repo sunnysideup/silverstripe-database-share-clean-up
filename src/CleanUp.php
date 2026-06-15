@@ -23,7 +23,7 @@ class CleanUp extends BuildTask
      * @var string Shown in the overview on the {@link TaskRunner}
      *             HTML or CLI interface. Should be short and concise, no HTML allowed.
      */
-    protected string $title = 'Cleanup and anonymise database - CAREFUL! Data will be deleted.';
+    protected string $title = 'Cleanup and anonymise database - CAREFUL! Data will be deleted. INCLUDES HANDY LIST OF TABLE SIZES';
 
     /**
      * @var string Describe the implications the task has,
@@ -391,7 +391,7 @@ html;
         $totalSizeAfter = 0;
         usort(
             $this->data,
-            fn($a, $b) => $b['SizeBefore'] <=> $a['SizeBefore']
+            fn ($a, $b) => $b['SizeBefore'] <=> $a['SizeBefore']
         );
         foreach ($this->data as $data) {
             $totalSizeBefore += $data['SizeBefore'];
