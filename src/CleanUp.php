@@ -2,6 +2,7 @@
 
 namespace Sunnysideup\DatabaseShareCleanUp;
 
+use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
@@ -88,6 +89,21 @@ class CleanUp extends BuildTask
      */
     private static $segment = 'database-share-clean-up';
 
+    /**
+     * Dropping tables, truncating versions and removing rows can not be undone:
+     * it is never done by following a link (GET), and never on a live site.
+     */
+    protected function mayRunForReal(HTTPRequest $request): bool
+    {
+        if (Director::is_cli() && ! Director::isLive()) {
+            return true;
+        }
+
+        echo '<p>"For real" can only be run on the command line, and not on a live site.</p>';
+
+        return false;
+    }
+
     public function setAnonymiser($anonymiser)
     {
         $this->anonymiser = $anonymiser;
@@ -121,6 +137,9 @@ class CleanUp extends BuildTask
         $this->forReal = (bool) $request->getVar('forreal');
         if ($this->forReal) {
             $this->debug = true;
+            if (! $this->mayRunForReal($request)) {
+                return;
+            }
         }
 
         $this->selectedTableList = $request->getVar('selectedtablelist') ?? [];
@@ -375,7 +394,7 @@ html;
         $totalSizeAfter = 0;
         usort(
             $this->data,
-            fn($a, $b) => $b['SizeBefore'] <=> $a['SizeBefore']
+            fn ($a, $b) => $b['SizeBefore'] <=> $a['SizeBefore']
         );
         foreach ($this->data as $data) {
             $totalSizeBefore += $data['SizeBefore'];
