@@ -4,7 +4,9 @@ namespace Sunnysideup\DatabaseShareCleanUp;
 
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Environment;
 use SilverStripe\Dev\BuildTask;
+use SilverStripe\Security\SecurityToken;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
 use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
 use Sunnysideup\Flush\FlushNowImplementor;
@@ -32,6 +34,8 @@ class CleanUp extends BuildTask
     protected $forReal = false;
 
     protected $anonymise = false;
+
+    protected $keepAdmins = false;
 
     protected $removeObsolete = false;
 
@@ -90,18 +94,38 @@ class CleanUp extends BuildTask
     private static $segment = 'database-share-clean-up';
 
     /**
-     * Dropping tables, truncating versions and removing rows can not be undone:
-     * it is never done by following a link (GET), and never on a live site.
+     * Dropping tables, truncating versions and removing rows can not be undone.
+     *
+     *  - never on a live site
+     *  - command line: always (non-live)
+     *  - browser: only in dev mode AND with a valid security token
+     *    (the token is part of the form, so following a plain link can not trigger it)
      */
     protected function mayRunForReal(HTTPRequest $request): bool
     {
-        if (Director::is_cli() && ! Director::isLive()) {
+        if (Director::isLive()) {
+            echo '<p>"For real" can not be run on a live site.</p>';
+
+            return false;
+        }
+
+        if (Director::is_cli()) {
             return true;
         }
 
-        echo '<p>"For real" can only be run on the command line, and not on a live site.</p>';
+        if (! Director::isDev()) {
+            echo '<p>"For real" can only be run in the browser when the site is in dev mode (or on the command line).</p>';
 
-        return false;
+            return false;
+        }
+
+        if (! SecurityToken::inst()->checkRequest($request)) {
+            echo '<p>"For real" needs a valid security token: please submit using the form below (not a link).</p>';
+
+            return false;
+        }
+
+        return true;
     }
 
     public function setAnonymiser($anonymiser)
@@ -126,7 +150,12 @@ class CleanUp extends BuildTask
      */
     public function run($request)
     {
+        // this can take a while, especially in the browser
+        Environment::increaseTimeLimitTo(0);
+        Environment::increaseMemoryLimitTo('1024M');
+
         $this->anonymise = (bool) $request->getVar('anonymise');
+        $this->keepAdmins = (bool) $request->getVar('keepadmins');
         $this->removeObsolete = (bool) $request->getVar('removeobsolete');
         $this->removeOldVersions = (bool) $request->getVar('removeoldversions');
         $this->removeRows = (bool) $request->getVar('removerows');
@@ -147,6 +176,7 @@ class CleanUp extends BuildTask
         $this->anonymiser->setDatabaseActions($this->database);
         $this->database->setForReal($this->forReal);
         $this->database->setDebug($this->debug);
+        $this->database->setKeepAdmins($this->keepAdmins);
 
         if ($this->forReal) {
             FlushNowImplementor::do_flush('<h3>Running in FOR REAL mode</h3>', 'bad');
@@ -317,6 +347,10 @@ class CleanUp extends BuildTask
     protected function createForm()
     {
         $anonymise = $this->anonymise ? 'checked="checked"' : '';
+        $keepAdmins = $this->keepAdmins ? 'checked="checked"' : '';
+        $token = SecurityToken::inst();
+        $tokenName = $token->getName();
+        $tokenValue = $token->getValue();
         $removeObsolete = $this->removeObsolete ? 'checked="checked"' : '';
         $removeOldVersions = $this->removeOldVersions ? 'checked="checked"' : '';
         $removeRows = $this->removeRows ? 'checked="checked"' : '';
@@ -364,6 +398,11 @@ class CleanUp extends BuildTask
                 <hr />
                 <h4>How to apply?</h4>
                 <div class="field" style="padding: 10px;">
+                    <input type="checkbox" name="keepadmins" {$keepAdmins} />
+                    <label>keep admins (do not anonymise administrators)</label>
+                    <input type="hidden" name="{$tokenName}" value="{$tokenValue}" />
+                </div>
+                <div class="field" style="padding: 10px;">
                     <input type="checkbox" name="selectedtables" {$selectedTables} />
                     <label>apply to selected tables only?</label>
                 </div>
@@ -409,7 +448,7 @@ html;
                         </ul>';
             }
 
-            $tableList = empty($this->selectedTableList[$data['TableName']]) ? '' : 'checked="checked"';
+            $tableList = in_array($data['TableName'], (array) $this->selectedTableList, true) ? 'checked="checked"' : '';
             $tbody .= '
                 <tr>
                     <td>

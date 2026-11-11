@@ -77,7 +77,7 @@ class Anonymiser
 
     /**
      * Additional Table.Field combos to anonymise, with their method suffix.
-     * e.g. ['MyTable.MyField' => 'Email']
+     * e.g. ['MyTable.MyField' => 'Email'] (use 'Text' for free text)
      *
      * @var array
      */
@@ -134,12 +134,50 @@ class Anonymiser
 
     /**
      * Runs anonymisation on any additionally specified Table.Field combos.
+     *
+     * Preferably configured as `Table.Field: Method`. A plain list of `Table.Field`
+     * is also accepted: the method is then guessed from the field name,
+     * falling back to `Text`. Invalid entries and missing tables are skipped.
      */
     public function anonymisePresets(): void
     {
-        foreach ($this->config()->get('also_remove_table_field_combos') as $combo => $fieldType) {
-            [$tableName, $fieldName] = explode('.', (string) $combo);
-            $this->databaseActions->CallAnonymiseMethod($fieldType, $tableName, $fieldName);
+        $combos = (array) $this->config()->get('also_remove_table_field_combos');
+        foreach ($combos as $combo => $fieldType) {
+            if (is_int($combo)) {
+                $combo = $fieldType;
+                $fieldType = '';
+            }
+
+            $parts = explode('.', (string) $combo);
+            if (2 !== count($parts) || '' === $parts[0] || '' === $parts[1]) {
+                DB::alteration_message('Invalid Table.Field combo: "' . $combo . '"', 'error');
+
+                continue;
+            }
+
+            [$tableName, $fieldName] = $parts;
+            if (! $this->databaseActions->tableExists($tableName)) {
+                DB::alteration_message('Skipping ' . $combo . ': table does not exist', 'info');
+
+                continue;
+            }
+
+            $this->databaseActions->CallAnonymiseMethod(
+                $fieldType ?: $this->guessFieldType($fieldName),
+                $tableName,
+                $fieldName
+            );
         }
+    }
+
+    protected function guessFieldType(string $fieldName): string
+    {
+        foreach ($this->config()->get('fields_to_anonymise') as $fieldPattern => $fieldType) {
+            if (strtolower($fieldName) === strtolower((string) $fieldPattern)) {
+                return $fieldType;
+            }
+        }
+
+        return 'Text';
     }
 }

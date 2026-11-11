@@ -3,11 +3,19 @@
 namespace Sunnysideup\DatabaseShareCleanUp\Api;
 
 use RuntimeException;
+use SilverStripe\Core\Config\Configurable;
+use SilverStripe\Core\Convert;
+use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\DB;
+use SilverStripe\Security\Member;
+use SilverStripe\Security\Permission;
 use Sunnysideup\Flush\FlushNowImplementor;
 
 class DatabaseActions
 {
+    use Injectable;
+    use Configurable;
+
     /**
      * @var string[]
      */
@@ -24,9 +32,61 @@ class DatabaseActions
         'date',
     ];
 
+    /**
+     * Members with any of these permission codes are treated as administrators
+     * (see `setKeepAdmins`).
+     *
+     * @var string[]
+     */
+    private static $admin_permission_codes = ['ADMIN'];
+
+    /**
+     * Members in groups with any of these codes are treated as administrators
+     * (see `setKeepAdmins`).
+     *
+     * @var string[]
+     */
+    private static $admin_group_codes = ['administrators'];
+
+    /**
+     * Tables that hold member rows => the column that holds the Member ID.
+     * Rows for administrators are skipped when anonymising these tables
+     * and keeping admins.
+     *
+     * @var array
+     */
+    private static $member_tables_to_protect = [
+        'Member' => 'ID',
+        'Member_Live' => 'ID',
+        'Member_Versions' => 'RecordID',
+    ];
+
+    /**
+     * Tables from which no rows are removed when keeping administrators
+     * (otherwise "remove old rows" could strip admin group membership).
+     *
+     * @var string[]
+     */
+    private static $tables_not_to_shrink_when_keeping_admins = [
+        'Group',
+        'Group_Members',
+        'Group_Roles',
+        'Permission',
+        'PermissionRole',
+        'PermissionRoleCode',
+        'Member',
+    ];
+
     protected $forReal = false;
 
     protected $debug = false;
+
+    protected $keepAdmins = false;
+
+    /**
+     * @var int[]|null
+     */
+    protected $adminIds;
 
     protected static $tableList = [];
 
@@ -40,6 +100,49 @@ class DatabaseActions
     public function setDebug(bool $bool)
     {
         $this->debug = $bool;
+    }
+
+    /**
+     * When set to true, administrators are not anonymised.
+     * Admins are worked out immediately, so before any rows are removed.
+     */
+    public function setKeepAdmins(bool $bool): self
+    {
+        $this->keepAdmins = $bool;
+        $this->adminIds = null;
+        if ($bool) {
+            $this->getAdminIds();
+        }
+
+        return $this;
+    }
+
+    public function getKeepAdmins(): bool
+    {
+        return $this->keepAdmins;
+    }
+
+    /**
+     * @return int[]
+     */
+    public function getAdminIds(): array
+    {
+        if (null === $this->adminIds) {
+            $ids = [];
+            $permissionCodes = (array) static::config()->get('admin_permission_codes');
+            if ([] !== $permissionCodes) {
+                $ids = array_merge($ids, Permission::get_members_by_permission($permissionCodes)->column('ID'));
+            }
+
+            $groupCodes = (array) static::config()->get('admin_group_codes');
+            if ([] !== $groupCodes) {
+                $ids = array_merge($ids, Member::get()->filter('Groups.Code', $groupCodes)->column('ID'));
+            }
+
+            $this->adminIds = array_values(array_unique(array_map('intval', $ids)));
+        }
+
+        return $this->adminIds;
     }
 
     public function emptyVersionedTable(string $tableName, ?bool $leaveLastVersion = false): bool
@@ -142,7 +245,29 @@ class DatabaseActions
         return '
         UPDATE "' . $tableName . '"
         SET "' . $fieldName . '" = ' . $expr . '
-        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'' . $this->adminExclusionSql($tableName);
+    }
+
+    /**
+     * When keeping admins, returns SQL (to append to a WHERE) that
+     * excludes the rows of administrators from member tables.
+     */
+    private function adminExclusionSql(string $tableName): string
+    {
+        if (! $this->keepAdmins) {
+            return '';
+        }
+
+        $tables = (array) static::config()->get('member_tables_to_protect');
+        $idColumn = $tables[$tableName] ?? null;
+        $adminIds = $this->getAdminIds();
+        if (! $idColumn || [] === $adminIds) {
+            return '';
+        }
+
+        $this->debugFlush('Keeping ' . count($adminIds) . ' admin(s) in ' . $tableName, 'info');
+
+        return ' AND "' . $idColumn . '" NOT IN (' . implode(', ', $adminIds) . ')';
     }
 
     protected function anonymiseEmail(string $tableName, string $fieldName): void
@@ -268,24 +393,27 @@ class DatabaseActions
 
     protected function anonymiseDob(string $tableName, string $fieldName): void
     {
-        $sql = '
-        UPDATE "' . $tableName . '"
-        SET "' . $fieldName . '" = DATE_FORMAT(
-            DATE_ADD("1970-01-01", INTERVAL FLOOR(RAND()*12783) DAY),
+        // note: string literals must use single quotes (double quotes are identifiers in ANSI mode)
+        $expr = 'DATE_FORMAT(
+            DATE_ADD(\'1970-01-01\', INTERVAL FLOOR(RAND()*12783) DAY),
             \'%d/%m/%Y\'
-        )
-        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
-        $this->executeSql($sql);
+        )';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
-
 
     protected function anonymiseDateOfBirth(string $tableName, string $fieldName): void
     {
-        $sql = '
-        UPDATE "' . $tableName . '"
-        SET "' . $fieldName . '" = DATE_ADD("1970-01-01", INTERVAL FLOOR(RAND()*12783) DAY)
-        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
-        $this->executeSql($sql);
+        $expr = 'DATE_ADD(\'1970-01-01\', INTERVAL FLOOR(RAND()*12783) DAY)';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    /**
+     * Anonymises free text (e.g. an email subject or body): replaces it with a random string.
+     */
+    protected function anonymiseText(string $tableName, string $fieldName): void
+    {
+        $expr = "CONCAT('anonymised-', " . $this->r(8) . ')';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseIp(string $tableName, string $fieldName): void
@@ -312,6 +440,12 @@ class DatabaseActions
 
     public function removeOldRowsFromTable(string $tableName, float $percentageToKeep)
     {
+        if ($this->keepAdmins && in_array($tableName, (array) static::config()->get('tables_not_to_shrink_when_keeping_admins'), true)) {
+            $this->debugFlush('Not removing rows from ' . $tableName . ' (keeping admins)', 'info');
+
+            return;
+        }
+
         $this->debugFlush('Deleting ' . (100 - round($percentageToKeep * 100, 2)) . '% of the Rows in ' . $tableName, 'obsolete');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
         $sortStatement = $this->getSortStatement($tableName);
@@ -372,7 +506,10 @@ class DatabaseActions
 
     public function tableExists(string $tableName): bool
     {
-        return (bool) DB::query("SHOW TABLES LIKE '" . $tableName . "';")->value();
+        // escape _ and % as they are wildcards in LIKE
+        $like = Convert::raw2sql(addcslashes($tableName, '_%\\'));
+
+        return (bool) DB::query("SHOW TABLES LIKE '" . $like . "';")->value();
     }
 
     public function getTableSizeInMegaBytes(string $tableName): float
