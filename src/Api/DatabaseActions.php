@@ -3,11 +3,19 @@
 namespace Sunnysideup\DatabaseShareCleanUp\Api;
 
 use RuntimeException;
+use SilverStripe\Core\Config\Configurable;
+use SilverStripe\Core\Convert;
+use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\DB;
+use SilverStripe\Security\Member;
+use SilverStripe\Security\Permission;
 use Sunnysideup\Flush\FlushNowImplementor;
 
 class DatabaseActions
 {
+    use Injectable;
+    use Configurable;
+
     /**
      * @var string[]
      */
@@ -24,9 +32,83 @@ class DatabaseActions
         'date',
     ];
 
+    /**
+     * Members with any of these permission codes are treated as administrators
+     * (see `setKeepAdmins`).
+     *
+     * @var string[]
+     */
+    private static $admin_permission_codes = ['ADMIN'];
+
+    /**
+     * Members in groups with any of these codes are treated as administrators
+     * (see `setKeepAdmins`).
+     *
+     * @var string[]
+     */
+    private static $admin_group_codes = ['administrators'];
+
+    /**
+     * Tables that hold member rows => the column that holds the Member ID.
+     * Rows for administrators are skipped when anonymising these tables
+     * and keeping admins.
+     *
+     * @var array
+     */
+    private static $member_tables_to_protect = [
+        'Member' => 'ID',
+        'Member_Live' => 'ID',
+        'Member_Versions' => 'RecordID',
+    ];
+
+    /**
+     * Tables from which no rows are removed when keeping administrators
+     * (otherwise "remove old rows" could strip admin group membership).
+     *
+     * @var string[]
+     */
+    private static $tables_not_to_shrink_when_keeping_admins = [
+        'Group',
+        'Group_Members',
+        'Group_Roles',
+        'Permission',
+        'PermissionRole',
+        'PermissionRoleCode',
+        'Member',
+    ];
+
     protected $forReal = false;
 
     protected $debug = false;
+
+    protected $keepAdmins = false;
+
+    /**
+     * What has been anonymised so far, for reporting:
+     * [['table' =>, 'field' =>, 'method' =>, 'rows' =>, 'example' =>], ...]
+     *
+     * @var array
+     */
+    protected $anonymiseLog = [];
+
+    /**
+     * SQL expression used for the field that is currently being anonymised.
+     *
+     * @var string
+     */
+    protected $currentExpr = '';
+
+    /**
+     * WHERE clause used for the field that is currently being anonymised.
+     *
+     * @var string
+     */
+    protected $currentWhere = '';
+
+    /**
+     * @var int[]|null
+     */
+    protected $adminIds;
 
     protected static $tableList = [];
 
@@ -40,6 +122,49 @@ class DatabaseActions
     public function setDebug(bool $bool)
     {
         $this->debug = $bool;
+    }
+
+    /**
+     * When set to true, administrators are not anonymised.
+     * Admins are worked out immediately, so before any rows are removed.
+     */
+    public function setKeepAdmins(bool $bool): self
+    {
+        $this->keepAdmins = $bool;
+        $this->adminIds = null;
+        if ($bool) {
+            $this->getAdminIds();
+        }
+
+        return $this;
+    }
+
+    public function getKeepAdmins(): bool
+    {
+        return $this->keepAdmins;
+    }
+
+    /**
+     * @return int[]
+     */
+    public function getAdminIds(): array
+    {
+        if (null === $this->adminIds) {
+            $ids = [];
+            $permissionCodes = (array) static::config()->get('admin_permission_codes');
+            if ([] !== $permissionCodes) {
+                $ids = array_merge($ids, Permission::get_members_by_permission($permissionCodes)->column('ID'));
+            }
+
+            $groupCodes = (array) static::config()->get('admin_group_codes');
+            if ([] !== $groupCodes) {
+                $ids = array_merge($ids, Member::get()->filter('Groups.Code', $groupCodes)->column('ID'));
+            }
+
+            $this->adminIds = array_values(array_unique(array_map('intval', $ids)));
+        }
+
+        return $this->adminIds;
     }
 
     public function emptyVersionedTable(string $tableName, ?bool $leaveLastVersion = false): bool
@@ -137,19 +262,79 @@ class DatabaseActions
         return implode(', ', array_fill(0, $count, $r));
     }
 
+    /**
+     * Builds the UPDATE statement used by (almost) all anonymise methods.
+     * - the new value is cut to the length of the column (if it has a length)
+     * - empty values are left alone
+     * - admins are left alone (if so requested)
+     */
     private function updateSql(string $tableName, string $fieldName, string $expr): string
     {
+        $maxLength = $this->getMaxLength($tableName, $fieldName);
+        if ($maxLength > 0) {
+            $expr = 'LEFT(' . $expr . ', ' . $maxLength . ')';
+        }
+
+        $where = '"' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'' . $this->adminExclusionSql($tableName);
+        $this->currentExpr = $expr;
+        $this->currentWhere = $where;
+
         return '
         UPDATE "' . $tableName . '"
         SET "' . $fieldName . '" = ' . $expr . '
-        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
+        WHERE ' . $where;
     }
+
+    /**
+     * Returns the maximum length of a char / varchar column, or 0 if there is none.
+     */
+    private function getMaxLength(string $tableName, string $fieldName): int
+    {
+        $details = $this->getAllFieldsForOneTableDetails($tableName);
+        if (isset($details[$fieldName]) && preg_match('/^(?:var)?char\((\d+)\)/i', (string) $details[$fieldName], $matches)) {
+            return (int) $matches[1];
+        }
+
+        return 0;
+    }
+
+    private function upper(): string
+    {
+        return "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
+    }
+
+    /**
+     * When keeping admins, returns SQL (to append to a WHERE) that
+     * excludes the rows of administrators from member tables.
+     */
+    private function adminExclusionSql(string $tableName): string
+    {
+        if (! $this->keepAdmins) {
+            return '';
+        }
+
+        $tables = (array) static::config()->get('member_tables_to_protect');
+        $idColumn = $tables[$tableName] ?? null;
+        $adminIds = $this->getAdminIds();
+        if (! $idColumn || [] === $adminIds) {
+            return '';
+        }
+
+        $this->debugFlush('Keeping ' . count($adminIds) . ' admin(s) in ' . $tableName, 'info');
+
+        return ' AND "' . $idColumn . '" NOT IN (' . implode(', ', $adminIds) . ')';
+    }
+
+    /*
+     * The anonymise methods below create SHORT, reasonable values on purpose:
+     * we do not want to bloat the database with long made-up values.
+     * Each method has an example of what it creates.
+     */
 
     protected function anonymiseEmail(string $tableName, string $fieldName): void
     {
-        // e.g. abc123@xy.zz
-        $r = $this->getRandomCharExpr();
-        $expr = 'CONCAT(' . $this->r(5) . ", '@', " . $this->r(3) . ", '.', " . $this->r(2) . ')';
+        // e.g. k3x9qa@a.co
+        $expr = 'CONCAT(' . $this->r(6) . ", '@a.co')";
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
@@ -160,9 +345,8 @@ class DatabaseActions
 
     protected function anonymiseFirstName(string $tableName, string $fieldName): void
     {
-        // e.g. Abcdef
-        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
-        $expr = 'CONCAT(' . $upper . ', ' . $this->r(5) . ')';
+        // e.g. Kxqa
+        $expr = 'CONCAT(' . $this->upper() . ', ' . $this->r(3) . ')';
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
@@ -178,8 +362,8 @@ class DatabaseActions
 
     protected function anonymiseCity(string $tableName, string $fieldName): void
     {
-        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
-        $expr = 'CONCAT(' . $upper . ', ' . $this->r(6) . ')';
+        // e.g. Kxqa9
+        $expr = 'CONCAT(' . $this->upper() . ', ' . $this->r(4) . ')';
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
@@ -190,52 +374,29 @@ class DatabaseActions
 
     protected function anonymiseAddress(string $tableName, string $fieldName): void
     {
-        // e.g. 42 Abcdef St
-        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
-        $suffixes = "'St', 'Rd', 'Ave', 'Ln', 'Cres', 'Pl'";
-        $expr = 'CONCAT(
-        FLOOR(RAND()*999)+1, \' \',
-        ' . $upper . ',
-        ' . $this->r(5) . ',
-        \' \',
-        ELT(FLOOR(RAND()*6)+1, ' . $suffixes . ')
-    )';
+        // e.g. 42 Kxq St
+        $expr = 'CONCAT(FLOOR(RAND()*99)+1, \' \', ' . $this->upper() . ', ' . $this->r(2) . ', \' St\')';
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseStreet(string $tableName, string $fieldName): void
     {
-        // e.g. Abcdef Street
-        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
-        $suffixes = "'Street', 'Road', 'Avenue', 'Lane', 'Crescent', 'Place'";
-        $expr = 'CONCAT(
-        ' . $upper . ',
-        ' . $this->r(5) . ',
-        \' \',
-        ELT(FLOOR(RAND()*6)+1, ' . $suffixes . ')
-    )';
+        // e.g. Kxq St
+        $expr = 'CONCAT(' . $this->upper() . ', ' . $this->r(2) . ', \' St\')';
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseAddress2(string $tableName, string $fieldName): void
     {
-        // e.g. Apt 42
-        $types = "'Apt', 'Suite', 'Unit', 'Floor'";
-        $expr = 'CONCAT(ELT(FLOOR(RAND()*4)+1, ' . $types . "), ' ', FLOOR(RAND()*99)+1)";
+        // e.g. Unit 42
+        $expr = "CONCAT('Unit ', FLOOR(RAND()*99)+1)";
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseCompany(string $tableName, string $fieldName): void
     {
-        // e.g. Abcdef Ltd
-        $upper = "SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',(RAND()*25)+1,1)";
-        $suffixes = "'Ltd', 'Inc', 'Co', 'Group', 'Holdings'";
-        $expr = 'CONCAT(
-        ' . $upper . ',
-        ' . $this->r(5) . ',
-        \' \',
-        ELT(FLOOR(RAND()*5)+1, ' . $suffixes . ')
-    )';
+        // e.g. Kxqa Ltd
+        $expr = 'CONCAT(' . $this->upper() . ', ' . $this->r(3) . ', \' Ltd\')';
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
@@ -246,46 +407,47 @@ class DatabaseActions
 
     protected function anonymisePhone(string $tableName, string $fieldName): void
     {
-        // e.g. 09-456-7890
-        $expr = "CONCAT('0', FLOOR(RAND()*7)+2, '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)";
+        // e.g. 094567890
+        $expr = "CONCAT('09', FLOOR(RAND()*9000000)+1000000)";
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseMobile(string $tableName, string $fieldName): void
     {
-        // e.g. 021-456-7890
-        $prefixes = "'021', '022', '027', '028'";
-        $expr = sprintf("CONCAT(ELT(FLOOR(RAND()*4)+1, %s), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)", $prefixes);
+        // e.g. 0214567890
+        $expr = "CONCAT('021', FLOOR(RAND()*9000000)+1000000)";
         $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseFax(string $tableName, string $fieldName): void
     {
-        $prefixes = "'03', '04', '06', '07', '09'";
-        $expr = sprintf("CONCAT(ELT(FLOOR(RAND()*5)+1, %s), '-', FLOOR(RAND()*900)+100, '-', FLOOR(RAND()*9000)+1000)", $prefixes);
-        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+        $this->anonymisePhone($tableName, $fieldName);
     }
 
     protected function anonymiseDob(string $tableName, string $fieldName): void
     {
-        $sql = '
-        UPDATE "' . $tableName . '"
-        SET "' . $fieldName . '" = DATE_FORMAT(
-            DATE_ADD("1970-01-01", INTERVAL FLOOR(RAND()*12783) DAY),
+        // note: string literals must use single quotes (double quotes are identifiers in ANSI mode)
+        $expr = 'DATE_FORMAT(
+            DATE_ADD(\'1970-01-01\', INTERVAL FLOOR(RAND()*12783) DAY),
             \'%d/%m/%Y\'
-        )
-        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
-        $this->executeSql($sql);
+        )';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
-
 
     protected function anonymiseDateOfBirth(string $tableName, string $fieldName): void
     {
-        $sql = '
-        UPDATE "' . $tableName . '"
-        SET "' . $fieldName . '" = DATE_ADD("1970-01-01", INTERVAL FLOOR(RAND()*12783) DAY)
-        WHERE "' . $fieldName . '" IS NOT NULL AND "' . $fieldName . '" <> \'\'';
-        $this->executeSql($sql);
+        $expr = 'DATE_ADD(\'1970-01-01\', INTERVAL FLOOR(RAND()*12783) DAY)';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
+    }
+
+    /**
+     * Anonymises free text (e.g. an email subject or body): replaces it with a random string.
+     */
+    protected function anonymiseText(string $tableName, string $fieldName): void
+    {
+        // e.g. anon k3x9
+        $expr = "CONCAT('anon ', " . $this->r(4) . ')';
+        $this->executeSql($this->updateSql($tableName, $fieldName, $expr));
     }
 
     protected function anonymiseIp(string $tableName, string $fieldName): void
@@ -312,6 +474,12 @@ class DatabaseActions
 
     public function removeOldRowsFromTable(string $tableName, float $percentageToKeep)
     {
+        if ($this->keepAdmins && in_array($tableName, (array) static::config()->get('tables_not_to_shrink_when_keeping_admins'), true)) {
+            $this->debugFlush('Not removing rows from ' . $tableName . ' (keeping admins)', 'info');
+
+            return;
+        }
+
         $this->debugFlush('Deleting ' . (100 - round($percentageToKeep * 100, 2)) . '% of the Rows in ' . $tableName, 'obsolete');
         $limit = $this->turnPercentageIntoLimit($tableName, $percentageToKeep);
         $sortStatement = $this->getSortStatement($tableName);
@@ -372,7 +540,10 @@ class DatabaseActions
 
     public function tableExists(string $tableName): bool
     {
-        return (bool) DB::query("SHOW TABLES LIKE '" . $tableName . "';")->value();
+        // escape _ and % as they are wildcards in LIKE
+        $like = Convert::raw2sql(addcslashes($tableName, '_%\\'));
+
+        return (bool) DB::query("SHOW TABLES LIKE '" . $like . "';")->value();
     }
 
     public function getTableSizeInMegaBytes(string $tableName): float
@@ -466,7 +637,7 @@ class DatabaseActions
     }
 
     /**
-     * Calls the appropriate anonymise method on the databaseActions object.
+     * Calls the appropriate anonymise method and logs what it did.
      */
     public function CallAnonymiseMethod(string $fieldType, string $tableName, string $fieldName): bool
     {
@@ -475,7 +646,40 @@ class DatabaseActions
             throw new RuntimeException(sprintf("Anonymisation method '%s' does not exist on ", $method) . static::class);
         }
 
+        $this->currentExpr = '';
+        $this->currentWhere = '';
         $this->$method($tableName, $fieldName);
+
+        $rows = 0;
+        $example = '';
+        if ('' !== $this->currentExpr) {
+            $rows = (int) DB::query('SELECT COUNT(*) FROM "' . $tableName . '" WHERE ' . $this->currentWhere)->value();
+            if ($rows > 0) {
+                $example = (string) DB::query('SELECT ' . $this->currentExpr)->value();
+            }
+        }
+
+        $this->anonymiseLog[] = [
+            'table' => $tableName,
+            'field' => $fieldName,
+            'method' => $fieldType,
+            'rows' => $rows,
+            'example' => $example,
+        ];
+
         return true;
+    }
+
+    /**
+     * @return array [['table' =>, 'field' =>, 'method' =>, 'rows' =>, 'example' =>], ...]
+     */
+    public function getAnonymiseLog(): array
+    {
+        return $this->anonymiseLog;
+    }
+
+    public function getLastAnonymiseLogEntry(): array
+    {
+        return $this->anonymiseLog ? end($this->anonymiseLog) : [];
     }
 }
