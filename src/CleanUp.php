@@ -4,9 +4,10 @@ namespace Sunnysideup\DatabaseShareCleanUp;
 
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Convert;
 use SilverStripe\Core\Environment;
+use SilverStripe\ORM\DB;
 use SilverStripe\Dev\BuildTask;
-use SilverStripe\Security\SecurityToken;
 use Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser;
 use Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions;
 use Sunnysideup\Flush\FlushNowImplementor;
@@ -119,13 +120,49 @@ class CleanUp extends BuildTask
             return false;
         }
 
-        if (! SecurityToken::inst()->checkRequest($request)) {
-            echo '<p>"For real" needs a valid security token: please submit using the form below (not a link).</p>';
+        if (! $this->checkFormToken((string) $request->getVar(self::FORM_TOKEN_NAME))) {
+            echo '<p>"For real" needs a valid token: please submit using the form below (not a link). The token is valid for about one to two hours.</p>';
 
             return false;
         }
 
         return true;
+    }
+
+    /**
+     * Name of the (hidden) form field that holds the token.
+     */
+    protected const FORM_TOKEN_NAME = 'cleanuptoken';
+
+    /**
+     * Token that proves the "for real" request came from our own form.
+     *
+     * Not based on the Silverstripe session / SecurityID: this task writes output
+     * straight away (flushing), so the session (and its cookie) can not be saved and
+     * a session based token never validates. This token is stateless: a hash of
+     * the current hour and a secret that only this site knows.
+     */
+    protected function getFormToken(int $hoursAgo = 0): string
+    {
+        $secret = implode('|', [
+            BASE_PATH,
+            (string) Environment::getEnv('SS_DATABASE_SERVER'),
+            (string) Environment::getEnv('SS_DATABASE_USERNAME'),
+            (string) Environment::getEnv('SS_DATABASE_PASSWORD'),
+            (string) DB::get_conn()->getSelectedDatabase(),
+        ]);
+
+        return hash_hmac('sha256', (string) (floor(time() / 3600) - $hoursAgo), $secret);
+    }
+
+    protected function checkFormToken(string $token): bool
+    {
+        if ('' === $token) {
+            return false;
+        }
+
+        // current hour or the one before
+        return hash_equals($this->getFormToken(0), $token) || hash_equals($this->getFormToken(1), $token);
     }
 
     public function setAnonymiser($anonymiser)
@@ -190,6 +227,7 @@ class CleanUp extends BuildTask
 
         $this->createForm();
         $this->runInner();
+        $this->createReport();
         $this->createTable();
         echo 'MEMORY USED:' . $this->formatBytes(memory_get_peak_usage());
     }
@@ -305,7 +343,9 @@ class CleanUp extends BuildTask
                 if ($this->anonymise) {
                     $outcome = $this->anonymiser->AnonymiseTableField($tableName, $fieldName);
                     if ($outcome) {
-                        $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': anonymised.';
+                        $last = $this->database->getLastAnonymiseLogEntry();
+                        $this->data[$tableName]['Actions'][] = ' ... ' . $fieldName . ': anonymised'
+                            . ($last ? ' as ' . $last['method'] . ' (' . $last['rows'] . ' rows)' : '') . '.';
                     }
                 }
 
@@ -344,13 +384,89 @@ class CleanUp extends BuildTask
         }
     }
 
+    /**
+     * What was (or, in a dry run, would be) done, and what else to consider.
+     */
+    protected function createReport()
+    {
+        $width = 'width: calc(100% - 380px);';
+        $mode = $this->forReal
+            ? '<strong style="color: red;">FOR REAL</strong>: the database has been changed.'
+            : '<strong style="color: green;">DRY RUN</strong>: nothing has been changed. Tick "do it for real?" to apply.';
+        $options = [];
+        foreach ([
+            'anonymise' => $this->anonymise,
+            'keep admins' => $this->keepAdmins,
+            'remove versioned table entries' => $this->removeOldVersions,
+            'remove obsolete tables' => $this->removeObsolete,
+            'empty large fields' => $this->emptyFields,
+            'remove old rows' => $this->removeRows,
+            'selected tables only' => $this->selectedTables,
+        ] as $label => $on) {
+            if ($on) {
+                $options[] = $label;
+            }
+        }
+
+        echo '<div style="' . $width . '"><h3>Summary</h3><p>' . $mode . '</p>'
+            . '<p>Actions: ' . ([] === $options ? '<em>none selected</em>' : implode(', ', $options)) . '.</p>';
+
+        if ($this->anonymise && $this->keepAdmins) {
+            $adminIds = $this->database->getAdminIds();
+            echo '<p>Keeping ' . count($adminIds) . ' administrator(s) in: '
+                . implode(', ', array_keys((array) $this->database->config()->get('member_tables_to_protect'))) . '.</p>';
+        }
+
+        $log = $this->database->getAnonymiseLog();
+        if ($this->anonymise) {
+            echo '<h3>Anonymised fields (' . count($log) . ')</h3>';
+            if ([] === $log) {
+                echo '<p><em>No fields were anonymised.</em></p>';
+            } else {
+                echo '<table border="1" style="width: 100%;"><thead><tr>'
+                    . '<th>Table.Field</th><th>Method</th><th>Rows</th><th>Example of new value</th>'
+                    . '</tr></thead><tbody>';
+                foreach ($log as $entry) {
+                    echo '<tr><td>' . Convert::raw2xml($entry['table'] . '.' . $entry['field']) . '</td>'
+                        . '<td>' . Convert::raw2xml($entry['method']) . '</td>'
+                        . '<td style="text-align: right;">' . (int) $entry['rows'] . '</td>'
+                        . '<td><code>' . Convert::raw2xml($entry['example']) . '</code></td></tr>';
+                }
+
+                echo '</tbody></table>';
+            }
+
+            $suggestions = $this->anonymiser->getSuggestions();
+            if ([] !== $suggestions) {
+                echo '<h3>Fields that look sensitive but were NOT anonymised (' . count($suggestions) . ')</h3>'
+                    . '<p>To anonymise any of these, add them to your <code>app/_config</code> yml. '
+                    . 'To leave them alone on purpose, add them to <code>keep_table_field_combos</code>. '
+                    . 'See <code>_config/database-share-clean-up.yml.example</code> in the module for all options.</p>'
+                    . '<pre style="background: #eee; padding: 10px;">'
+                    . Convert::raw2xml($this->suggestionsAsYml($suggestions))
+                    . '</pre>';
+            }
+        }
+
+        echo '</div>';
+    }
+
+    protected function suggestionsAsYml(array $suggestions): string
+    {
+        $yml = Anonymiser::class . ":\n  also_remove_table_field_combos:\n";
+        foreach ($suggestions as $combo => $method) {
+            $yml .= '    ' . $combo . ': ' . $method . "\n";
+        }
+
+        return $yml;
+    }
+
     protected function createForm()
     {
         $anonymise = $this->anonymise ? 'checked="checked"' : '';
         $keepAdmins = $this->keepAdmins ? 'checked="checked"' : '';
-        $token = SecurityToken::inst();
-        $tokenName = $token->getName();
-        $tokenValue = $token->getValue();
+        $tokenName = self::FORM_TOKEN_NAME;
+        $tokenValue = $this->getFormToken();
         $removeObsolete = $this->removeObsolete ? 'checked="checked"' : '';
         $removeOldVersions = $this->removeOldVersions ? 'checked="checked"' : '';
         $removeRows = $this->removeRows ? 'checked="checked"' : '';

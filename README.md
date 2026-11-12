@@ -40,18 +40,8 @@ composer require sunnysideup/database-share-clean-up
 
 ### Configuration
 
-
-
-In the `_config` folder you will find the `database-share-clean-up.yml.example`
-file that shows options for the configuration of this module.
-
-We recommend that you:
-
-  1. copy these `database-share-clean-up.yml.example` files into your
-`app/_config` folder (where available - otherwise search for `private static $` in the module to see what can be configured)
-  2. remove the .example extension,
-  3. delete the lines you do not care about, and
-  4. adjust the configurations that you would like to use.
+See [docs/en/INDEX.md](docs/en/INDEX.md) for how to use and configure this module,
+and `_config/database-share-clean-up.yml.example` for all options.
 
 
 ## Contributing

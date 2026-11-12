@@ -1,0 +1,105 @@
+# Example configuration for sunnysideup/database-share-clean-up
+# Copy the parts you need into app/_config/<something>.yml (and remove everything you do not need).
+#
+# Run the task at: /dev/tasks/database-share-clean-up  (browser, dev mode only for "for real") or
+#                  vendor/bin/sake dev/tasks/database-share-clean-up forreal=1 anonymise=1 keepadmins=1
+# It is a dry run unless "for real" is ticked / forreal=1 is set.
+# The task lists, at the end of a run, any fields that look sensitive but were not anonymised
+# - including a ready-made yml snippet.
+---
+Name: my-database-share-clean-up
+---
+
+# ---------------------------------------------------------------------------
+# ANONYMISING
+# ---------------------------------------------------------------------------
+Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser:
+
+  # Anonymise additional fields: Table.Field: Method
+  # Methods: Email, Username, FirstName, Surname, LastName, City, Suburb, Address, Street, Address2,
+  #          Company, CompanyName, Phone, Mobile, Fax, Dob, DateOfBirth, Ip, IpAddress, Proxy,
+  #          Text (anything else, e.g. an email subject or body)
+  # All values are SHORT on purpose, and are cut to the length of the field.
+  also_remove_table_field_combos:
+    OrderEmailRecord.To: Email
+    OrderEmailRecord.From: Email
+    OrderEmailRecord.Subject: Text
+    OrderEmailRecord.Content: Text
+
+  # Field names (in any table) that are anonymised automatically: FieldName: Method
+  # You can add your own (or override) here. The defaults are in Anonymiser.php.
+  fields_to_anonymise:
+    MyCustomerEmail: Email
+    NickName: FirstName
+
+  # Do NOT anonymise these Table.Field combos
+  keep_table_field_combos:
+    - EcommerceDBConfig.ShopPhysicalAddress
+    - PickUpOrDeliveryModifierOptions.PickupStoreEmail
+
+  # Do NOT anonymise anything in these tables
+  tables_to_keep:
+    - StorePage
+    - StorePage_Live
+    - StorePage_Versions
+
+  # Empty (truncate) these tables when anonymising (defaults: MemberPassword, LoginAttempt)
+  tables_to_remove:
+    - MemberPassword
+    - LoginAttempt
+
+# ---------------------------------------------------------------------------
+# KEEP ADMINS ("keep admins" checkbox / keepadmins=1)
+# ---------------------------------------------------------------------------
+Sunnysideup\DatabaseShareCleanUp\Api\DatabaseActions:
+
+  # members with one of these permissions are admins
+  admin_permission_codes:
+    - ADMIN
+
+  # members in one of these groups (group code) are admins
+  admin_group_codes:
+    - administrators
+
+  # member tables => the column with the Member ID. Admin rows are left alone in these tables.
+  member_tables_to_protect:
+    Member: ID
+    Member_Live: ID
+    Member_Versions: RecordID
+
+# ---------------------------------------------------------------------------
+# CLEANING UP (removing / emptying)
+# ---------------------------------------------------------------------------
+Sunnysideup\DatabaseShareCleanUp\CleanUp:
+
+  # DROP these tables (when "remove obsolete tables" is ticked)
+  tables_to_delete_forever:
+    - PRO_TO_UPDATE
+    - SubmittedForm
+
+  # keep only a few rows of these tables ("remove old rows")
+  tables_to_be_cleaned:
+    - SearchHistory
+    - Order
+
+  # empty these fields in all tables ("empty large fields")
+  fields_to_be_cleaned:
+    - OrderAsHTML
+
+  # empty these Table.Field combos ("empty large fields")
+  field_table_comboes_to_be_cleaned:
+    - MyTable.MyBigField
+
+  # do not touch these tables / fields at all
+  tables_to_keep:
+    - SiteTree
+  fields_to_keep:
+    - ClassName
+    - Created
+    - LastEdited
+  field_table_combos_to_keep:
+    - MyTable.MyField
+
+  # tables / columns bigger than this (in MB) are trimmed
+  max_table_size_in_mb: 20
+  max_column_size_in_mb: 2

@@ -88,6 +88,23 @@ class Anonymiser
      */
     protected $databaseActions;
 
+    /**
+     * Fields that look sensitive, but are not anonymised (yet): ['Table.Field' => 'SuggestedMethod'].
+     *
+     * @var array
+     */
+    protected $suggestions = [];
+
+    /**
+     * @return array ['Table.Field' => 'SuggestedMethod']
+     */
+    public function getSuggestions(): array
+    {
+        ksort($this->suggestions);
+
+        return $this->suggestions;
+    }
+
     public function setDatabaseActions(object $databaseActions): self
     {
         $this->databaseActions = $databaseActions;
@@ -124,10 +141,10 @@ class Anonymiser
         foreach ($this->config()->get('fields_to_anonymise') as $fieldPattern => $fieldType) {
             if ($fieldNameLower === strtolower((string) $fieldPattern)) {
                 return $this->databaseActions->CallAnonymiseMethod($fieldType, $tableName, $fieldName);
-            } elseif (str_contains($fieldNameLower, strtolower((string) $fieldPattern))) {
-                DB::alteration_message('Also consider: ' . $fieldName . ' contains:' . $fieldPattern, 'info');
             }
         }
+
+        $this->collectSuggestion($tableName, $fieldName);
 
         return false;
     }
@@ -167,6 +184,33 @@ class Anonymiser
                 $tableName,
                 $fieldName
             );
+        }
+    }
+
+    /**
+     * Remembers fields that look sensitive (e.g. "BillingEmail" or "EmailTemplate")
+     * but are not anonymised, so that they can be reported at the end.
+     * The match is case sensitive on purpose: "ShippingCity" yes, "Velocity" no.
+     */
+    protected function collectSuggestion(string $tableName, string $fieldName): void
+    {
+        $combo = $tableName . '.' . $fieldName;
+        if (isset($this->config()->get('also_remove_table_field_combos')[$combo])) {
+            return;
+        }
+
+        foreach ($this->config()->get('fields_to_anonymise') as $fieldPattern => $fieldType) {
+            $fieldPattern = (string) $fieldPattern;
+            $length = strlen($fieldPattern);
+            $endsWith = $length >= 3 && str_ends_with($fieldName, $fieldPattern);
+            $startsWith = $length >= 4
+                && str_starts_with($fieldName, $fieldPattern)
+                && ctype_upper(substr($fieldName, $length, 1) ?: 'A');
+            if ($endsWith || $startsWith) {
+                $this->suggestions[$combo] = $fieldType;
+
+                return;
+            }
         }
     }
 

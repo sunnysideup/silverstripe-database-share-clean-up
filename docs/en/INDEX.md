@@ -26,5 +26,34 @@
 
 - never on a live site
 - on the command line: always (on non-live sites)
-- in the browser: only in dev mode, and only by submitting the form (it includes a security token),
+- in the browser: only in dev mode, and only by submitting the form (it includes a token),
   not by following a link.
+
+# Configuration
+
+See `_config/database-share-clean-up.yml.example` for ALL options with explanations.
+Copy the parts you need to your `app/_config` folder (as a `.yml` file) and adjust.
+
+The most common ones:
+
+```yml
+Sunnysideup\DatabaseShareCleanUp\Api\Anonymiser:
+  # anonymise extra fields: Table.Field: Method (use Text for free text)
+  also_remove_table_field_combos:
+    OrderEmailRecord.To: Email
+    OrderEmailRecord.Subject: Text
+  # do not anonymise these
+  keep_table_field_combos:
+    - EcommerceDBConfig.ShopPhysicalAddress
+  tables_to_keep:
+    - StorePage
+```
+
+After a run, the task lists the fields that look sensitive but were not anonymised,
+including a yml snippet you can paste into your config.
+
+Anonymised values are short on purpose (and cut to the field length) so the database does not bloat.
+
+Options on the form (or as url / command line variables): `anonymise`, `keepadmins`,
+`removeoldversions`, `removeobsolete`, `emptyfields`, `removerows`, `selectedtables`, `debug`, `forreal`.
+"For real" can run on the command line (non-live) or in the browser in dev mode (via the form only).
