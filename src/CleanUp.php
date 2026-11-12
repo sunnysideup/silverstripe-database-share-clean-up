@@ -189,13 +189,13 @@ class CleanUp extends BuildTask
             new InputOption('anonymise', 'a', InputOption::VALUE_NONE, 'Anonymise data'),
             new InputOption('keepadmins', 'k', InputOption::VALUE_NONE, 'Do not anonymise administrators (used with --anonymise)'),
             new InputOption('removeobsolete', 'o', InputOption::VALUE_NONE, 'Remove obsolete tables'),
-            new InputOption('removeoldversions', null, InputOption::VALUE_NONE, 'Remove versioned table entries'),
+            new InputOption('removeoldversions', 'm', InputOption::VALUE_NONE, 'Remove versioned table entries'),
             new InputOption('removerows', 'r', InputOption::VALUE_NONE, 'Remove old rows if there are too many (not recommended)'),
             new InputOption('emptyfields', 'e', InputOption::VALUE_NONE, 'Empty large fields'),
             new InputOption('selectedtables', 's', InputOption::VALUE_NONE, 'Apply to selected tables only'),
             new InputOption('selectedtablelist', 'l', InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'List of selected tables'),
             new InputOption('debug', 'd', InputOption::VALUE_NONE, 'Enable debug mode'),
-            new InputOption('forreal', null, InputOption::VALUE_NONE, 'Execute for real (not a dry run)'),
+            new InputOption('forreal', 'F', InputOption::VALUE_NONE, 'Execute for real (not a dry run)'),
             new InputOption(self::FORM_TOKEN_NAME, null, InputOption::VALUE_REQUIRED, 'Token of the form (browser only, needed to run for real in the browser)', ''),
         ];
     }
